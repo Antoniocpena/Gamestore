@@ -15,6 +15,7 @@ import com.example.gamestore.model.GameProduct
 @Composable
 fun CatalogScreen(
     products: List<GameProduct>,
+    favoriteProductIds: Set<String>,
     onProductSelected: (String) -> Unit,
     onToggleFavorite: (String) -> Unit
 ) {
@@ -35,7 +36,11 @@ fun CatalogScreen(
                     Spacer(modifier = Modifier.weight(1f))
                     IconButton(onClick = { onToggleFavorite(product.id) }) {
                         Icon(
-                            imageVector = if (product.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            imageVector = if (product.id in favoriteProductIds) {
+                                Icons.Default.Star
+                            } else {
+                                Icons.Default.StarBorder
+                            },
                             contentDescription = "Favorito"
                         )
                     }

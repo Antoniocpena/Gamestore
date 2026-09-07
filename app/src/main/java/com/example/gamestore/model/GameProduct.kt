@@ -5,6 +5,5 @@ data class GameProduct(
     val name: String,
     val description: String,
     val price: Double,
-    val developerId: String,
-    val isFavorite: Boolean = false
+    val developerId: String
 )

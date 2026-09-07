@@ -1,14 +1,13 @@
 package com.example.gamestore
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.example.gamestore.model.GameProduct
 import com.example.gamestore.model.DeveloperProfile
 import com.example.gamestore.ui.state.StoreUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 
 class StoreViewModel : ViewModel() {
 
@@ -25,17 +24,19 @@ class StoreViewModel : ViewModel() {
             )
         )
     )
-    val uiState: StateFlow<StoreUiState> = _uiState
+    val uiState: StateFlow<StoreUiState> = _uiState.asStateFlow()
 
     fun toggleFavorite(productId: String) {
-        viewModelScope.launch {
-            _uiState.update { current ->
-                val updatedProducts = current.products.map { product ->
-                    if (product.id == productId) {
-                        product.copy(isFavorite = !product.isFavorite)
-                    } else product
+        _uiState.update { currentState ->
+            if (currentState.products.none { it.id == productId }) {
+                currentState
+            } else {
+                val updatedFavorites = if (productId in currentState.favoriteProductIds) {
+                    currentState.favoriteProductIds - productId
+                } else {
+                    currentState.favoriteProductIds + productId
                 }
-                current.copy(products = updatedProducts)
+                currentState.copy(favoriteProductIds = updatedFavorites)
             }
         }
     }

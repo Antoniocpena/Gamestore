@@ -1,0 +1,9 @@
+- [x] Actualizar `StoreUiState.kt` para incluir `searchQuery`
+- [x] Implementar lógica de búsqueda en `StoreViewModel.kt`
+- [x] Conectar `MainActivity.kt` con la búsqueda del ViewModel
+- [x] Corregir y completar `CatalogScreen.kt`
+    - [x] Añadir imports faltantes
+    - [x] Conectar estado de búsqueda al `TextField`
+    - [x] Completar `ImageSkeleton`
+    - [x] Corregir advertencias y sintaxis
+- [x] Verificar compilación

@@ -6,5 +6,5 @@ import com.example.gamestore.model.DeveloperProfile
 data class StoreUiState(
     val products: List<GameProduct> = emptyList(),
     val profiles: List<DeveloperProfile> = emptyList(),
-    val favoriteProductIds: Set<String> = emptySet()
+    val searchQuery: String = ""
 )

@@ -2,7 +2,7 @@ package com.example.gamestore.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -16,9 +16,10 @@ fun DetailScreen(
     isFavorite: Boolean,
     onBack: () -> Unit,
     onToggleFavorite: (String) -> Unit,
-    onOpenProfile: (String) -> Unit
+    onOpenProfile: (String) -> Unit,
+    onAddToOrder: (String) -> Unit,
 ) {
-    var showMore by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(value = false) }
 
     Scaffold(
         topBar = {
@@ -26,13 +27,17 @@ fun DetailScreen(
                 title = { Text(product.name) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Regresar")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Regresar")
                     }
-                }
+                },
             )
-        }
+        },
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(16.dp),
+        ) {
             Text("Precio: $${product.price}")
             Text("Descripción: ${product.description}")
 
@@ -44,6 +49,11 @@ fun DetailScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { onOpenProfile(product.developerId) }) {
                 Text("Ver perfil del desarrollador")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { onAddToOrder(product.id) }) {
+                Text("Agregar al pedido")
             }
 
             Spacer(modifier = Modifier.height(8.dp))

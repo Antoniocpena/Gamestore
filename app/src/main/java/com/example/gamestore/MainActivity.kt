@@ -37,21 +37,29 @@ class MainActivity : ComponentActivity() {
                     NavDisplay(
                         backStack = backStack,
                         modifier = Modifier.padding(innerPadding),
-                        onBack = { backStack.removeLastOrNull() }
+                        onBack = { backStack.removeLastOrNull() },
                     ) { key ->
                         NavEntry(key) {
                             when (key) {
                                 is StoreNavKey.Catalog -> {
                                     CatalogScreen(
                                         products = uiState.products,
-                                        favoriteProductIds = uiState.favoriteProductIds,
+                                        searchQuery = uiState.searchQuery,
                                         onProductSelected = { productId ->
                                             backStack.add(StoreNavKey.Detail(productId))
                                         },
                                         onToggleFavorite = { productId ->
                                             storeViewModel.toggleFavorite(productId)
-                                        }
-                                    )
+                                        },
+                                        onQueryChange = { query ->
+                                            storeViewModel.onQueryChange(query)
+                                        },
+                                        onClearQuery = {
+                                            storeViewModel.clearQuery()
+                                        },
+                                    ) {
+                                        /* scroll arriba */
+                                    }
                                 }
                                 is StoreNavKey.Detail -> {
                                     val product: GameProduct? = uiState.products.find { it.id == key.productId }
@@ -65,8 +73,10 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onOpenProfile = { developerId ->
                                                 backStack.add(StoreNavKey.Profile(developerId))
-                                            }
-                                        )
+                                            },
+                                        ) { _ ->
+                                            /* agregar al pedido */
+                                        }
                                     }
                                 }
                                 is StoreNavKey.Profile -> {
@@ -74,8 +84,9 @@ class MainActivity : ComponentActivity() {
                                     profile?.let {
                                         ProfileScreen(
                                             profile = it,
-                                            onBack = { backStack.removeLastOrNull() }
-                                        )
+                                        ) {
+                                            backStack.removeLastOrNull()
+                                        }
                                     }
                                 }
                                 else -> {}

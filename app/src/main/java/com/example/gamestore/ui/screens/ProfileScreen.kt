@@ -27,7 +27,11 @@ fun ProfileScreen(
             )
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(16.dp)
+        ) {
             Text("Rol: ${profile.role}")
             Text("Ubicación: ${profile.location}")
             Spacer(modifier = Modifier.height(8.dp))

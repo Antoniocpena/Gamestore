@@ -44,12 +44,20 @@ class MainActivity : ComponentActivity() {
                                 is StoreNavKey.Catalog -> {
                                     CatalogScreen(
                                         products = uiState.products,
+                                        searchQuery = uiState.searchQuery,
                                         onProductSelected = { productId ->
                                             backStack.add(StoreNavKey.Detail(productId))
                                         },
                                         onToggleFavorite = { productId ->
                                             storeViewModel.toggleFavorite(productId)
-                                        }
+                                        },
+                                        onQueryChange = { query ->
+                                            storeViewModel.onQueryChange(query)
+                                        },
+                                        onClearQuery = {
+                                            storeViewModel.clearQuery()
+                                        },
+                                        onScrollTop = { /* scroll arriba */ }
                                     )
                                 }
                                 is StoreNavKey.Detail -> {
@@ -63,6 +71,9 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onOpenProfile = { developerId ->
                                                 backStack.add(StoreNavKey.Profile(developerId))
+                                            },
+                                            onAddToOrder = { productId ->
+                                                /* agregar al pedido */
                                             }
                                         )
                                     }

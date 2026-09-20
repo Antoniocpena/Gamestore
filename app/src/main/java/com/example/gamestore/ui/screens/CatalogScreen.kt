@@ -8,15 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -25,27 +17,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,7 +38,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.example.gamestore.model.GameProduct
 import java.text.NumberFormat
-import java.util.Locale
+import java.util.*
 
 private const val CATALOG_LOG_TAG = "CatalogLifecycle"
 
@@ -69,34 +51,30 @@ private enum class CatalogRenderMode {
 @Composable
 fun CatalogScreen(
     products: List<GameProduct>,
+    searchQuery: String,
     onProductSelected: (String) -> Unit,
-    onToggleFavorite: (String) -> Unit
+    onToggleFavorite: (String) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onClearQuery: () -> Unit,
+    onScrollTop: () -> Unit
 ) {
-    var renderMode by rememberSaveable {
-        mutableStateOf(CatalogRenderMode.LAZY_GRID)
-    }
+    var renderMode by rememberSaveable { mutableStateOf(CatalogRenderMode.LAZY_GRID) }
 
     DisposableEffect(renderMode) {
-        Log.d(
-            CATALOG_LOG_TAG,
-            "MODO ACTIVO: $renderMode; productos=${products.size}"
-        )
-
-        onDispose {
-            Log.d(
-                CATALOG_LOG_TAG,
-                "MODO FINALIZADO: $renderMode"
-            )
-        }
+        Log.d(CATALOG_LOG_TAG, "MODO ACTIVO: $renderMode; productos=${products.size}")
+        onDispose { Log.d(CATALOG_LOG_TAG, "MODO FINALIZADO: $renderMode") }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text("Catálogo (${products.size})")
-                }
+                title = { Text("Catálogo (${products.size})") }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onScrollTop) {
+                Text("↑")
+            }
         }
     ) { innerPadding ->
         Column(
@@ -104,11 +82,34 @@ fun CatalogScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // 🔹 Campo de búsqueda mejorado
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onQueryChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                label = { Text("Buscar productos") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = onClearQuery) {
+                            Icon(Icons.Default.Clear, contentDescription = "Limpiar búsqueda")
+                        }
+                    }
+                },
+                singleLine = true
+            )
+            
+            Text(
+                text = "${products.size} resultados",
+                modifier = Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall
+            )
+
             RenderModeSelector(
                 selectedMode = renderMode,
-                onModeSelected = {
-                    renderMode = it
-                }
+                onModeSelected = { renderMode = it }
             )
 
             when (renderMode) {
@@ -119,7 +120,6 @@ fun CatalogScreen(
                         onToggleFavorite = onToggleFavorite
                     )
                 }
-
                 CatalogRenderMode.CONVENTIONAL -> {
                     ConventionalCatalog(
                         products = products,
@@ -145,22 +145,13 @@ private fun RenderModeSelector(
     ) {
         FilterChip(
             selected = selectedMode == CatalogRenderMode.LAZY_GRID,
-            onClick = {
-                onModeSelected(CatalogRenderMode.LAZY_GRID)
-            },
-            label = {
-                Text("Lazy grid")
-            }
+            onClick = { onModeSelected(CatalogRenderMode.LAZY_GRID) },
+            label = { Text("Lazy grid") }
         )
-
         FilterChip(
             selected = selectedMode == CatalogRenderMode.CONVENTIONAL,
-            onClick = {
-                onModeSelected(CatalogRenderMode.CONVENTIONAL)
-            },
-            label = {
-                Text("Convencional")
-            }
+            onClick = { onModeSelected(CatalogRenderMode.CONVENTIONAL) },
+            label = { Text("Convencional") }
         )
     }
 }
@@ -178,17 +169,8 @@ private fun LazyCatalogGrid(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(
-            items = products,
-            key = { product ->
-                product.id
-            }
-        ) { product ->
-            ProductCard(
-                product = product,
-                onProductSelected = onProductSelected,
-                onToggleFavorite = onToggleFavorite
-            )
+        items(products, key = { it.id }) { product ->
+            ProductCard(product, onProductSelected, onToggleFavorite)
         }
     }
 }
@@ -207,11 +189,7 @@ private fun ConventionalCatalog(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         products.forEach { product ->
-            ProductCard(
-                product = product,
-                onProductSelected = onProductSelected,
-                onToggleFavorite = onToggleFavorite
-            )
+            ProductCard(product, onProductSelected, onToggleFavorite)
         }
     }
 }
@@ -223,32 +201,17 @@ private fun ProductCard(
     onToggleFavorite: (String) -> Unit
 ) {
     DisposableEffect(product.id) {
-        Log.d(
-            CATALOG_LOG_TAG,
-            "ENTRA tarjeta ${product.id}"
-        )
-
-        onDispose {
-            Log.d(
-                CATALOG_LOG_TAG,
-                "SALE tarjeta ${product.id}"
-            )
-        }
+        Log.d(CATALOG_LOG_TAG, "ENTRA tarjeta ${product.id}")
+        onDispose { Log.d(CATALOG_LOG_TAG, "SALE tarjeta ${product.id}") }
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                onProductSelected(product.id)
-            }
+            .clickable { onProductSelected(product.id) }
     ) {
         Column {
-            RemoteProductImage(
-                imageUrl = product.imageUrl,
-                productName = product.name
-            )
-
+            RemoteProductImage(imageUrl = product.imageUrl, productName = product.name)
             Column(
                 modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -260,45 +223,24 @@ private fun ProductCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-
                 Text(
-                    text = NumberFormat
-                        .getCurrencyInstance(Locale.US)
-                        .format(product.price),
+                    text = NumberFormat.getCurrencyInstance(Locale.US).format(product.price),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = if (product.isAvailable) {
-                            "Disponible"
-                        } else {
-                            "Agotado"
-                        },
-                        color = if (product.isAvailable) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        },
+                        text = if (product.isAvailable) "Disponible" else "Agotado",
+                        color = if (product.isAvailable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.labelLarge
                     )
-
-                    IconButton(
-                        onClick = {
-                            onToggleFavorite(product.id)
-                        }
-                    ) {
+                    IconButton(onClick = { onToggleFavorite(product.id) }) {
                         Icon(
-                            imageVector = if (product.isFavorite) {
-                                Icons.Default.Star
-                            } else {
-                                Icons.Default.StarBorder
-                            },
+                            imageVector = if (product.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = if (product.isFavorite) {
                                 "Quitar ${product.name} de favoritos"
                             } else {
@@ -313,36 +255,20 @@ private fun ProductCard(
 }
 
 @Composable
-private fun RemoteProductImage(
-    imageUrl: String,
-    productName: String
-) {
-    var isLoading by rememberSaveable(imageUrl) {
-        mutableStateOf(true)
-    }
-
-    var hasError by rememberSaveable(imageUrl) {
-        mutableStateOf(false)
-    }
+private fun RemoteProductImage(imageUrl: String, productName: String) {
+    var isLoading by remember { mutableStateOf(true) }
+    var hasError by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
-            .clip(
-                RoundedCornerShape(
-                    topStart = 12.dp,
-                    topEnd = 12.dp
-                )
-            ),
-        contentAlignment = Alignment.Center
+            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
+        contentAlignment = androidx.compose.ui.Alignment.Center
     ) {
         if (isLoading) {
-            ImageSkeleton(
-                modifier = Modifier.fillMaxSize()
-            )
+            ImageSkeleton(modifier = Modifier.fillMaxSize())
         }
-
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(imageUrl)
@@ -350,39 +276,20 @@ private fun RemoteProductImage(
                 .build(),
             contentDescription = "Portada de $productName",
             contentScale = ContentScale.Crop,
-            onLoading = {
-                isLoading = true
-                hasError = false
-            },
-            onSuccess = {
-                isLoading = false
-                hasError = false
-            },
-            onError = {
-                isLoading = false
-                hasError = true
-            },
+            onLoading = { isLoading = true; hasError = false },
+            onSuccess = { isLoading = false; hasError = false },
+            onError = { isLoading = false; hasError = true },
             modifier = Modifier
                 .fillMaxSize()
-                .alpha(
-                    if (isLoading || hasError) {
-                        0f
-                    } else {
-                        1f
-                    }
-                )
+                .alpha(if (isLoading || hasError) 0f else 1f)
         )
-
         if (hasError) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
                 Icon(
                     imageVector = Icons.Default.BrokenImage,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error
                 )
-
                 Text(
                     text = "Imagen no disponible",
                     style = MaterialTheme.typography.labelSmall,
@@ -394,13 +301,8 @@ private fun RemoteProductImage(
 }
 
 @Composable
-private fun ImageSkeleton(
-    modifier: Modifier = Modifier
-) {
-    val transition = rememberInfiniteTransition(
-        label = "image-skeleton"
-    )
-
+private fun ImageSkeleton(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "image-skeleton")
     val opacity by transition.animateFloat(
         initialValue = 0.35f,
         targetValue = 0.75f,
@@ -410,12 +312,8 @@ private fun ImageSkeleton(
         ),
         label = "skeleton-opacity"
     )
-
     Box(
-        modifier = modifier.background(
-            MaterialTheme.colorScheme.surfaceVariant.copy(
-                alpha = opacity
-            )
-        )
+        modifier = modifier
+            .background(Color.LightGray.copy(alpha = opacity))
     )
 }

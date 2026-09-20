@@ -15,7 +15,8 @@ fun DetailScreen(
     product: GameProduct,
     onBack: () -> Unit,
     onToggleFavorite: (String) -> Unit,
-    onOpenProfile: (String) -> Unit
+    onOpenProfile: (String) -> Unit,
+    onAddToOrder: (String) -> Unit
 ) {
     var showMore by remember { mutableStateOf(false) }
 
@@ -31,7 +32,11 @@ fun DetailScreen(
             )
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(16.dp)
+        ) {
             Text("Precio: $${product.price}")
             Text("Descripción: ${product.description}")
 
@@ -43,6 +48,11 @@ fun DetailScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { onOpenProfile(product.developerId) }) {
                 Text("Ver perfil del desarrollador")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { onAddToOrder(product.id) }) {
+                Text("Agregar al pedido")
             }
 
             Spacer(modifier = Modifier.height(8.dp))

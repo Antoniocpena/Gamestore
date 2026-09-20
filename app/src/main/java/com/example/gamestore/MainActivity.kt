@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
                     NavDisplay(
                         backStack = backStack,
                         modifier = Modifier.padding(innerPadding),
-                        onBack = { backStack.removeLastOrNull() }
+                        onBack = { backStack.removeLastOrNull() },
                     ) { key ->
                         NavEntry(key) {
                             when (key) {
@@ -57,8 +57,9 @@ class MainActivity : ComponentActivity() {
                                         onClearQuery = {
                                             storeViewModel.clearQuery()
                                         },
-                                        onScrollTop = { /* scroll arriba */ }
-                                    )
+                                    ) {
+                                        /* scroll arriba */
+                                    }
                                 }
                                 is StoreNavKey.Detail -> {
                                     val product: GameProduct? = uiState.products.find { it.id == key.productId }
@@ -72,10 +73,9 @@ class MainActivity : ComponentActivity() {
                                             onOpenProfile = { developerId ->
                                                 backStack.add(StoreNavKey.Profile(developerId))
                                             },
-                                            onAddToOrder = { productId ->
-                                                /* agregar al pedido */
-                                            }
-                                        )
+                                        ) { _ ->
+                                            /* agregar al pedido */
+                                        }
                                     }
                                 }
                                 is StoreNavKey.Profile -> {
@@ -83,8 +83,9 @@ class MainActivity : ComponentActivity() {
                                     profile?.let {
                                         ProfileScreen(
                                             profile = it,
-                                            onBack = { backStack.removeLastOrNull() }
-                                        )
+                                        ) {
+                                            backStack.removeLastOrNull()
+                                        }
                                     }
                                 }
                                 else -> {}

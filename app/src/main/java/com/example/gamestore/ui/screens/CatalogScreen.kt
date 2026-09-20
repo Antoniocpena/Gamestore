@@ -56,7 +56,7 @@ fun CatalogScreen(
     onToggleFavorite: (String) -> Unit,
     onQueryChange: (String) -> Unit,
     onClearQuery: () -> Unit,
-    onScrollTop: () -> Unit
+    onScrollTop: () -> Unit,
 ) {
     var renderMode by rememberSaveable { mutableStateOf(CatalogRenderMode.LAZY_GRID) }
 
@@ -108,9 +108,10 @@ fun CatalogScreen(
             )
 
             RenderModeSelector(
-                selectedMode = renderMode,
-                onModeSelected = { renderMode = it }
-            )
+                selectedMode = renderMode
+            ) {
+                renderMode = it
+            }
 
             when (renderMode) {
                 CatalogRenderMode.LAZY_GRID -> {
@@ -135,23 +136,23 @@ fun CatalogScreen(
 @Composable
 private fun RenderModeSelector(
     selectedMode: CatalogRenderMode,
-    onModeSelected: (CatalogRenderMode) -> Unit
+    onModeSelected: (CatalogRenderMode) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         FilterChip(
             selected = selectedMode == CatalogRenderMode.LAZY_GRID,
             onClick = { onModeSelected(CatalogRenderMode.LAZY_GRID) },
-            label = { Text("Lazy grid") }
+            label = { Text("Lazy grid") },
         )
         FilterChip(
             selected = selectedMode == CatalogRenderMode.CONVENTIONAL,
             onClick = { onModeSelected(CatalogRenderMode.CONVENTIONAL) },
-            label = { Text("Convencional") }
+            label = { Text("Convencional") },
         )
     }
 }
@@ -160,14 +161,14 @@ private fun RenderModeSelector(
 private fun LazyCatalogGrid(
     products: List<GameProduct>,
     onProductSelected: (String) -> Unit,
-    onToggleFavorite: (String) -> Unit
+    onToggleFavorite: (String) -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(products, key = { it.id }) { product ->
             ProductCard(product, onProductSelected, onToggleFavorite)
@@ -179,14 +180,14 @@ private fun LazyCatalogGrid(
 private fun ConventionalCatalog(
     products: List<GameProduct>,
     onProductSelected: (String) -> Unit,
-    onToggleFavorite: (String) -> Unit
+    onToggleFavorite: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         products.forEach { product ->
             ProductCard(product, onProductSelected, onToggleFavorite)
@@ -198,7 +199,7 @@ private fun ConventionalCatalog(
 private fun ProductCard(
     product: GameProduct,
     onProductSelected: (String) -> Unit,
-    onToggleFavorite: (String) -> Unit
+    onToggleFavorite: (String) -> Unit,
 ) {
     DisposableEffect(product.id) {
         Log.d(CATALOG_LOG_TAG, "ENTRA tarjeta ${product.id}")
@@ -208,7 +209,7 @@ private fun ProductCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onProductSelected(product.id) }
+            .clickable { onProductSelected(product.id) },
     ) {
         Column {
             RemoteProductImage(imageUrl = product.imageUrl, productName = product.name)
@@ -256,8 +257,8 @@ private fun ProductCard(
 
 @Composable
 private fun RemoteProductImage(imageUrl: String, productName: String) {
-    var isLoading by remember { mutableStateOf(true) }
-    var hasError by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(value = true) }
+    var hasError by remember { mutableStateOf(value = false) }
 
     Box(
         modifier = Modifier
@@ -272,7 +273,7 @@ private fun RemoteProductImage(imageUrl: String, productName: String) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(imageUrl)
-                .crossfade(true)
+                .crossfade(enable = true)
                 .build(),
             contentDescription = "Portada de $productName",
             contentScale = ContentScale.Crop,

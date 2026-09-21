@@ -8,9 +8,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
             GamestoreTheme {
                 val backStack = rememberNavBackStack(StoreNavKey.Catalog)
                 val storeViewModel: StoreViewModel = viewModel()
-                val uiState by storeViewModel.uiState.collectAsState()
+                val uiState by storeViewModel.uiState.collectAsStateWithLifecycle()
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     NavDisplay(
@@ -43,8 +43,11 @@ class MainActivity : ComponentActivity() {
                             when (key) {
                                 is StoreNavKey.Catalog -> {
                                     CatalogScreen(
-                                        products = uiState.products,
+                                        products = uiState.visibleProducts,
                                         searchQuery = uiState.searchQuery,
+                                        catalogPosition = uiState.catalogPosition,
+                                        orderItemCount = uiState.orderItemCount,
+                                        formattedOrderTotal = uiState.formattedOrderTotal,
                                         onProductSelected = { productId ->
                                             backStack.add(StoreNavKey.Detail(productId))
                                         },
@@ -57,15 +60,20 @@ class MainActivity : ComponentActivity() {
                                         onClearQuery = {
                                             storeViewModel.clearQuery()
                                         },
-                                    ) {
-                                        /* scroll arriba */
-                                    }
+                                        onLazyPositionChange = storeViewModel::updateLazyCatalogPosition,
+                                        onConventionalPositionChange = storeViewModel::updateConventionalCatalogPosition,
+                                    )
                                 }
                                 is StoreNavKey.Detail -> {
-                                    val product: GameProduct? = uiState.products.find { it.id == key.productId }
+                                    val product: GameProduct? = uiState.catalog.find { it.id == key.productId }
                                     product?.let {
+                                        val orderLine = uiState.orderLine(it.id)
                                         DetailScreen(
                                             product = it,
+                                            quantityInOrder = orderLine?.quantity ?: 0,
+                                            formattedOrderSubtotal = uiState.formattedSubtotal(it.id),
+                                            formattedOrderTotal = uiState.formattedOrderTotal,
+                                            orderFeedback = uiState.orderFeedback,
                                             onBack = { backStack.removeLastOrNull() },
                                             onToggleFavorite = { productId ->
                                                 storeViewModel.toggleFavorite(productId)
@@ -73,9 +81,13 @@ class MainActivity : ComponentActivity() {
                                             onOpenProfile = { developerId ->
                                                 backStack.add(StoreNavKey.Profile(developerId))
                                             },
-                                        ) { _ ->
-                                            /* agregar al pedido */
-                                        }
+                                            onAddToOrder = { productId -> storeViewModel.addToOrder(productId) },
+                                            onRemoveFromOrder = { productId -> storeViewModel.removeFromOrder(productId) },
+                                            onUpdateQuantity = { productId, quantity ->
+                                                storeViewModel.updateQuantity(productId, quantity)
+                                            },
+                                            onDismissOrderFeedback = storeViewModel::clearOrderFeedback,
+                                        )
                                     }
                                 }
                                 is StoreNavKey.Profile -> {

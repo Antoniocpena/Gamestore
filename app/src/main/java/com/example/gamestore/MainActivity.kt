@@ -8,9 +8,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
             GamestoreTheme {
                 val backStack = rememberNavBackStack(StoreNavKey.Catalog)
                 val storeViewModel: StoreViewModel = viewModel()
-                val uiState by storeViewModel.uiState.collectAsState()
+                val uiState by storeViewModel.uiState.collectAsStateWithLifecycle()
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     NavDisplay(
@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
                                     product?.let {
                                         DetailScreen(
                                             product = it,
+                                            isFavorite = it.id in uiState.favoriteProductIds,
                                             onBack = { backStack.removeLastOrNull() },
                                             onToggleFavorite = { productId ->
                                                 storeViewModel.toggleFavorite(productId)

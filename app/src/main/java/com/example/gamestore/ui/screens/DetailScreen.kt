@@ -13,7 +13,6 @@ import com.example.gamestore.model.GameProduct
 @Composable
 fun DetailScreen(
     product: GameProduct,
-    isFavorite: Boolean,
     onBack: () -> Unit,
     onToggleFavorite: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
@@ -43,7 +42,7 @@ fun DetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { onToggleFavorite(product.id) }) {
-                Text(if (isFavorite) "Quitar de favoritos" else "Marcar favorito")
+                Text(if (product.isFavorite) "Quitar de favoritos" else "Marcar favorito")
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -66,4 +65,3 @@ fun DetailScreen(
         }
     }
 }
-

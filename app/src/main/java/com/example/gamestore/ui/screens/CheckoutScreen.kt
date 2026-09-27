@@ -1,5 +1,6 @@
 package com.example.gamestore.ui.screens
 
+<<<<<<< Updated upstream
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -199,3 +200,195 @@ private fun CheckoutTextField(
             }
     )
 }
+=======
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.gamestore.StoreViewModel
+import com.example.gamestore.model.BillingType
+import com.example.gamestore.model.PaymentMethod
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CheckoutScreen(
+    viewModel: StoreViewModel,
+    onConfirmOrder: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val checkoutState = viewModel.checkoutUiState.collectAsStateWithLifecycle()
+    val uiState = checkoutState.value
+
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val nitFocusRequester = remember { FocusRequester() }
+
+    val isConfirmEnabled by remember(checkoutState) {
+        derivedStateOf { uiState.isFormValid }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        OutlinedTextField(
+            value = uiState.fullName,
+            onValueChange = viewModel::onNameChange,
+            label = { Text("Nombre completo") },
+            singleLine = true,
+            isError = uiState.errors["name"] != null && (uiState.isTouched["name"] == true),
+            supportingText = { uiState.errors["name"]?.let { Text(it) } },
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Words,
+                imeAction = ImeAction.Next
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { focusManager.moveFocus(FocusDirection.Next) }
+            )
+        )
+
+        OutlinedTextField(
+            value = uiState.phone,
+            onValueChange = viewModel::onPhoneChange,
+            label = { Text("Teléfono / WhatsApp") },
+            singleLine = true,
+            isError = uiState.errors["phone"] != null && (uiState.isTouched["phone"] == true),
+            supportingText = { uiState.errors["phone"]?.let { Text(it) } },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Phone,
+                imeAction = if (uiState.billingType == BillingType.NIT) ImeAction.Next else ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { nitFocusRequester.requestFocus() },
+                onDone = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                }
+            )
+        )
+
+        Column(Modifier.selectableGroup()) {
+            listOf(BillingType.CF, BillingType.NIT).forEach { type ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .selectable(
+                            selected = uiState.billingType == type,
+                            role = Role.RadioButton,
+                            onClick = {
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+                                viewModel.onBillingTypeChange(type)
+                            }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = uiState.billingType == type,
+                        onClick = null
+                    )
+                    Text(if (type == BillingType.CF) "Consumidor Final (CF)" else "Factura con NIT")
+                }
+            }
+        }
+
+        AnimatedVisibility(visible = uiState.billingType == BillingType.NIT) {
+            Column {
+                OutlinedTextField(
+                    value = uiState.nit,
+                    onValueChange = viewModel::onNitChange,
+                    modifier = Modifier.focusRequester(nitFocusRequester),
+                    label = { Text("NIT") },
+                    singleLine = true,
+                    isError = uiState.errors["nit"] != null && (uiState.isTouched["nit"] == true),
+                    supportingText = { uiState.errors["nit"]?.let { Text(it) } },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Next) }
+                    )
+                )
+
+                OutlinedTextField(
+                    value = uiState.razonSocial,
+                    onValueChange = viewModel::onRazonSocialChange,
+                    label = { Text("Razón Social") },
+                    singleLine = true,
+                    isError = uiState.errors["razon"] != null && (uiState.isTouched["razon"] == true),
+                    supportingText = { uiState.errors["razon"]?.let { Text(it) } },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                        }
+                    )
+                )
+            }
+        }
+
+        Column(Modifier.selectableGroup()) {
+            listOf(PaymentMethod.CASH, PaymentMethod.TRANSFER).forEach { method ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .selectable(
+                            selected = uiState.paymentMethod == method,
+                            role = Role.RadioButton,
+                            onClick = {
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+                                viewModel.onPaymentMethodChange(method)
+                            }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = uiState.paymentMethod == method,
+                        onClick = null
+                    )
+                    Text(if (method == PaymentMethod.CASH) "Efectivo contra entrega" else "Transferencia bancaria")
+                }
+            }
+        }
+
+        Button(
+            onClick = onConfirmOrder,
+            enabled = isConfirmEnabled,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Confirmar pedido")
+        }
+    }
+}
+>>>>>>> Stashed changes

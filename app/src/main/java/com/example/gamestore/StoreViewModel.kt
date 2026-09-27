@@ -5,12 +5,19 @@ import androidx.lifecycle.viewModelScope
 import com.example.gamestore.model.BillingType
 import com.example.gamestore.model.DeveloperProfile
 import com.example.gamestore.model.GameProduct
+<<<<<<< Updated upstream
 import com.example.gamestore.model.OrderReceipt
 import com.example.gamestore.model.PaymentMethod
 import com.example.gamestore.ui.state.CheckoutField
 import com.example.gamestore.ui.state.CheckoutUiState
 import com.example.gamestore.ui.state.StoreUiState
 import java.util.UUID
+=======
+import com.example.gamestore.model.BillingType
+import com.example.gamestore.model.PaymentMethod
+import com.example.gamestore.ui.state.StoreUiState
+import com.example.gamestore.ui.state.CheckoutUiState
+>>>>>>> Stashed changes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -295,4 +302,100 @@ class StoreViewModel : ViewModel() {
             )
         }
     }
+<<<<<<< Updated upstream
 }
+=======
+
+    private val _checkoutUiState = MutableStateFlow(CheckoutUiState())
+    val checkoutUiState: StateFlow<CheckoutUiState> = _checkoutUiState
+
+    private fun validateName(name: String): String? {
+        val letters = name.filter { it.isLetter() }
+        return if (letters.length < 3 || name.any { it.isDigit() }) {
+            "Debe tener al menos 3 letras y sin números"
+        } else null
+    }
+
+    private fun validatePhone(phone: String): String? {
+        return if (phone.length != 8 || phone.any { !it.isDigit() }) {
+            "Debe tener exactamente 8 dígitos"
+        } else null
+    }
+
+    private fun validateNit(nit: String): String? {
+        return if (nit.length < 5 || nit.any { !it.isDigit() }) {
+            "Ingrese al menos 5 dígitos"
+        } else null
+    }
+
+    private fun validateRazonSocial(razon: String): String? {
+        return if (razon.trim().length < 3) {
+            "Debe tener al menos 3 caracteres"
+        } else null
+    }
+
+    fun onNameChange(newName: String) {
+        _checkoutUiState.update { it.copy(fullName = newName, isTouched = it.isTouched + ("name" to true)) }
+        validateForm()
+    }
+
+    fun onPhoneChange(newPhone: String) {
+        _checkoutUiState.update { it.copy(phone = newPhone, isTouched = it.isTouched + ("phone" to true)) }
+        validateForm()
+    }
+
+    fun onBillingTypeChange(type: BillingType) {
+        _checkoutUiState.update {
+            if (type == BillingType.CF) {
+                it.copy(
+                    billingType = type,
+                    nit = "",
+                    razonSocial = "",
+                    errors = it.errors + ("nit" to null) + ("razon" to null),
+                    isTouched = it.isTouched + ("nit" to false) + ("razon" to false)
+                )
+            } else {
+                it.copy(billingType = type)
+            }
+        }
+        validateForm()
+    }
+
+    fun onNitChange(newNit: String) {
+        _checkoutUiState.update { it.copy(nit = newNit, isTouched = it.isTouched + ("nit" to true)) }
+        validateForm()
+    }
+
+    fun onRazonSocialChange(newRazon: String) {
+        _checkoutUiState.update { it.copy(razonSocial = newRazon, isTouched = it.isTouched + ("razon" to true)) }
+        validateForm()
+    }
+
+    fun onPaymentMethodChange(method: PaymentMethod) {
+        _checkoutUiState.update { it.copy(paymentMethod = method) }
+        validateForm()
+    }
+
+    private fun validateForm() {
+        val state = _checkoutUiState.value
+        val errors = mutableMapOf<String, String?>()
+
+        errors["name"] = validateName(state.fullName)
+        errors["phone"] = validatePhone(state.phone)
+
+        if (state.billingType == BillingType.NIT) {
+            errors["nit"] = validateNit(state.nit)
+            errors["razon"] = validateRazonSocial(state.razonSocial)
+        } else {
+            errors["nit"] = null
+            errors["razon"] = null
+        }
+
+        val isValid = errors.values.all { it == null }
+
+        _checkoutUiState.update {
+            it.copy(errors = errors, isFormValid = isValid)
+        }
+    }
+}
+>>>>>>> Stashed changes

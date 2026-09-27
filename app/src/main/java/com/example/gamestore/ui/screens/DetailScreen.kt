@@ -51,7 +51,9 @@ fun DetailScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = { onAddToOrder(product.id) }) {
+            Button(onClick = {onAddToOrder(product.id)},
+                enabled = product.isAvailable
+            ) {
                 Text("Agregar al pedido")
             }
 

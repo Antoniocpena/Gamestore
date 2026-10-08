@@ -15,7 +15,7 @@ import com.example.gamestore.model.OrderReceipt
 @Composable
 fun ConfirmationScreen(
     receipt: OrderReceipt,
-    onDone: () -> Unit
+    onDone: () -> Unit,
 ) {
     Column(
         modifier = Modifier

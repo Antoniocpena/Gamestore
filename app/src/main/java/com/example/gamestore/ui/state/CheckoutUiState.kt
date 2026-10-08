@@ -9,7 +9,7 @@ enum class CheckoutField {
     NAME,
     PHONE,
     NIT,
-    BUSINESS_NAME
+    BUSINESS_NAME,
 }
 
 data class CheckoutUiState(
@@ -30,7 +30,7 @@ data class CheckoutUiState(
     val isBusinessNameTouched: Boolean = false,
     val receipt: OrderReceipt? = null,
     val isSubmitting: Boolean = false,
-    val submitError: String? = null
+    val submitError: String? = null,
 ) {
     val itemCount: Int
         get() = lines.sumOf { it.quantity }
@@ -40,12 +40,12 @@ data class CheckoutUiState(
 
     val isFormValid: Boolean
         get() {
-            if (nameError != null || name.isBlank()) return false
-            if (phoneError != null || phone.isBlank()) return false
+            if ((nameError != null) || name.isBlank()) return false
+            if ((phoneError != null) || phone.isBlank()) return false
 
             if (billingType == BillingType.NIT) {
-                if (nitError != null || nit.isBlank()) return false
-                if (businessNameError != null || businessName.isBlank()) {
+                if ((nitError != null) || nit.isBlank()) return false
+                if ((businessNameError != null) || businessName.isBlank()) {
                     return false
                 }
             }

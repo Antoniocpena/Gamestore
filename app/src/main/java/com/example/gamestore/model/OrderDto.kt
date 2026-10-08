@@ -8,7 +8,7 @@ data class OrderLineDto(
     val productName: String,
     val quantity: Int,
     val unitPrice: Double,
-    val subtotal: Double
+    val subtotal: Double,
 )
 
 @Serializable
@@ -18,17 +18,17 @@ data class OrderCustomerDto(
     val billingType: BillingType,
     val nit: String? = null,
     val businessName: String? = null,
-    val paymentMethod: PaymentMethod
+    val paymentMethod: PaymentMethod,
 )
 
 @Serializable
 data class CreateOrderDto(
     val lines: List<OrderLineDto>,
     val total: Double,
-    val customer: OrderCustomerDto
+    val customer: OrderCustomerDto,
 )
 
 @Serializable
 data class CreatedOrderDto(
-    val id: String
+    val id: String,
 )

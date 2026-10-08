@@ -1,9 +1,14 @@
 package com.example.gamestore
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room3.Room
+import com.example.gamestore.data.FavoriteEntity
 import com.example.gamestore.data.OrderApi
 import com.example.gamestore.data.OrderHttpException
+import com.example.gamestore.data.OrderLineEntity
+import com.example.gamestore.data.StoreDatabase
 import com.example.gamestore.model.BillingType
 import com.example.gamestore.model.CreateOrderDto
 import com.example.gamestore.model.DeveloperProfile
@@ -12,6 +17,7 @@ import com.example.gamestore.model.OrderCustomerDto
 import com.example.gamestore.model.OrderLineDto
 import com.example.gamestore.model.OrderReceipt
 import com.example.gamestore.model.PaymentMethod
+import com.example.gamestore.preferences.PreferencesManager
 import com.example.gamestore.ui.state.CheckoutField
 import com.example.gamestore.ui.state.CheckoutUiState
 import com.example.gamestore.ui.state.StoreUiState
@@ -27,51 +33,71 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 
-class StoreViewModel(
-    private val orderApi: OrderApi = OrderApi()
-) : ViewModel() {
+class StoreViewModel @JvmOverloads constructor(
+    application: Application,
+    private val orderApi: OrderApi = OrderApi(),
+) : AndroidViewModel(application) {
+
+    private val db = Room.databaseBuilder(
+        application,
+        StoreDatabase::class.java,
+        "store.db",
+    ).build()
+
+    private val favoriteDao = db.favoriteDao()
+    private val orderLineDao = db.orderLineDao()
+
+    private val preferencesManager = PreferencesManager(application)
+    val preferenceFlow = preferencesManager.preferenceFlow
 
     private val _checkoutState = MutableStateFlow(CheckoutUiState())
     val checkoutState: StateFlow<CheckoutUiState> = _checkoutState
+
+    init {
+        viewModelScope.launch {
+            orderLineDao.observeOrderLines().collect { orderLines ->
+                _checkoutState.update { state ->
+                    state.copy(
+                        lines = orderLines.map { entity ->
+                            OrderLineDto(
+                                productId = entity.productId,
+                                productName = entity.productName,
+                                quantity = entity.quantity,
+                                unitPrice = entity.unitPrice,
+                                subtotal = entity.subtotal,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    fun setPreference(value: String) {
+        viewModelScope.launch {
+            preferencesManager.setPreference(value)
+        }
+    }
 
     fun startCheckout(productId: String) {
         if (_checkoutState.value.isSubmitting) return
 
         val product = _allProducts.value.find {
-            it.id == productId && it.isAvailable
+            (it.id == productId) && it.isAvailable
         } ?: return
 
-        _checkoutState.update { state ->
-            val existing = state.lines.find {
-                it.productId == productId
-            }
-
-            val updatedLines = if (existing == null) {
-                state.lines + OrderLineDto(
+        viewModelScope.launch {
+            val existing = _checkoutState.value.lines.find { it.productId == productId }
+            val newQty = (existing?.quantity ?: 0) + 1
+            val subtotal = product.price * newQty
+            orderLineDao.insertLine(
+                OrderLineEntity(
                     productId = product.id,
                     productName = product.name,
-                    quantity = 1,
+                    quantity = newQty,
                     unitPrice = product.price,
-                    subtotal = product.price
-                )
-            } else {
-                state.lines.map { line ->
-                    if (line.productId == productId) {
-                        line.copy(
-                            quantity = line.quantity + 1,
-                            subtotal = line.unitPrice *
-                                    (line.quantity + 1)
-                        )
-                    } else {
-                        line
-                    }
-                }
-            }
-
-            state.copy(
-                lines = updatedLines,
-                receipt = null,
-                submitError = null
+                    subtotal = subtotal,
+                ),
             )
         }
     }
@@ -79,26 +105,42 @@ class StoreViewModel(
     fun changeQuantity(productId: String, quantity: Int) {
         if (_checkoutState.value.isSubmitting) return
 
-        _checkoutState.update { state ->
-            state.copy(
-                lines = state.lines.mapNotNull { line ->
-                    when {
-                        line.productId != productId -> line
-                        quantity <= 0 -> null
-                        else -> line.copy(
-                            quantity = quantity,
-                            subtotal = line.unitPrice * quantity
-                        )
-                    }
-                },
-                submitError = null
-            )
+        viewModelScope.launch {
+            if (quantity <= 0) {
+                orderLineDao.deleteLine(
+                    OrderLineEntity(
+                        productId = productId,
+                        productName = "",
+                        quantity = 0,
+                        unitPrice = 0.0,
+                        subtotal = 0.0,
+                    ),
+                )
+            } else {
+                val product = _allProducts.value.find { it.id == productId } ?: return@launch
+                val subtotal = product.price * quantity
+                orderLineDao.insertLine(
+                    OrderLineEntity(
+                        productId = productId,
+                        productName = product.name,
+                        quantity = quantity,
+                        unitPrice = product.price,
+                        subtotal = subtotal,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun confirmOrder() {
+        viewModelScope.launch {
+            orderLineDao.clearAll()
         }
     }
 
     fun onCheckoutFieldChange(
         field: CheckoutField,
-        value: String
+        value: String,
     ) {
         _checkoutState.update { currentState ->
             val updated = when (field) {
@@ -149,7 +191,7 @@ class StoreViewModel(
                     nitError = null,
                     businessNameError = null,
                     isNitTouched = false,
-                    isBusinessNameTouched = false
+                    isBusinessNameTouched = false,
                 )
             } else {
                 currentState.copy(billingType = type)
@@ -166,7 +208,7 @@ class StoreViewModel(
     }
 
     private fun revalidateAll(
-        state: CheckoutUiState
+        state: CheckoutUiState,
     ): CheckoutUiState {
         val nameError = if (state.isNameTouched) {
             CheckoutValidators.name(state.name)
@@ -181,7 +223,7 @@ class StoreViewModel(
         }
 
         val nitError =
-            if (state.billingType == BillingType.NIT &&
+            if ((state.billingType == BillingType.NIT) &&
                 state.isNitTouched
             ) {
                 CheckoutValidators.nit(state.nit)
@@ -190,7 +232,7 @@ class StoreViewModel(
             }
 
         val businessNameError =
-            if (state.billingType == BillingType.NIT &&
+            if ((state.billingType == BillingType.NIT) &&
                 state.isBusinessNameTouched
             ) {
                 CheckoutValidators.businessName(state.businessName)
@@ -202,7 +244,7 @@ class StoreViewModel(
             nameError = nameError,
             phoneError = phoneError,
             nitError = nitError,
-            businessNameError = businessNameError
+            businessNameError = businessNameError,
         )
     }
 
@@ -230,7 +272,7 @@ class StoreViewModel(
         val businessErr =
             if (currentState.billingType == BillingType.NIT) {
                 CheckoutValidators.businessName(
-                    currentState.businessName
+                    currentState.businessName,
                 )
             } else {
                 null
@@ -251,7 +293,7 @@ class StoreViewModel(
                     nameError = nameErr,
                     phoneError = phoneErr,
                     nitError = nitErr,
-                    businessNameError = businessErr
+                    businessNameError = businessErr,
                 )
             }
             return
@@ -271,16 +313,14 @@ class StoreViewModel(
                     currentState.businessName.trim().takeIf {
                         currentState.billingType == BillingType.NIT
                     },
-                paymentMethod = currentState.paymentMethod
-            )
+                paymentMethod = currentState.paymentMethod,
+            ),
         )
 
-        // Se marca antes de lanzar la corrutina:
-        // un segundo toque no puede iniciar otro POST.
         _checkoutState.update {
             it.copy(
                 isSubmitting = true,
-                submitError = null
+                submitError = null,
             )
         }
 
@@ -288,8 +328,8 @@ class StoreViewModel(
             try {
                 val created = orderApi.create(order)
 
-                // Solo después de recibir y leer el ID
-                // se vacían las líneas del pedido.
+                orderLineDao.clearAll()
+
                 _checkoutState.update { state ->
                     state.copy(
                         lines = emptyList(),
@@ -306,26 +346,26 @@ class StoreViewModel(
                             businessName =
                                 order.customer.businessName,
                             paymentMethod =
-                                order.customer.paymentMethod
-                        )
+                                order.customer.paymentMethod,
+                        ),
                     )
                 }
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: OrderHttpException) {
+            } catch (_: OrderHttpException) {
                 _checkoutState.update {
                     it.copy(
                         isSubmitting = false,
                         submitError =
-                            "No se pudo confirmar el pedido. Inténtalo de nuevo."
+                            "No se pudo confirmar el pedido. Inténtalo de nuevo.",
                     )
                 }
-            } catch (error: SerializationException) {
+            } catch (_: SerializationException) {
                 _checkoutState.update {
                     it.copy(
                         isSubmitting = false,
                         submitError =
-                            "No pudimos leer la confirmación. Inténtalo más tarde."
+                            "No pudimos leer la confirmación. Inténtalo más tarde.",
                     )
                 }
             } catch (error: IOException) {
@@ -333,7 +373,7 @@ class StoreViewModel(
                     it.copy(
                         isSubmitting = false,
                         submitError =
-                            "Sin conexión. Revisa internet e inténtalo de nuevo."
+                            "Sin conexión. Revisa internet e inténtalo de nuevo.",
                     )
                 }
             } catch (error: Exception) {
@@ -341,7 +381,7 @@ class StoreViewModel(
                     it.copy(
                         isSubmitting = false,
                         submitError =
-                            "Ocurrió un problema. Inténtalo de nuevo."
+                            "Ocurrió un problema. Inténtalo de nuevo.",
                     )
                 }
             }
@@ -354,53 +394,53 @@ class StoreViewModel(
         DeveloperProfile(
             "dev01", "Nebula Forge", "Estudio independiente",
             "Guatemala",
-            "Especialistas en aventuras y mundos de fantasía."
+            "Especialistas en aventuras y mundos de fantasía.",
         ),
         DeveloperProfile(
             "dev02", "Pixel Jaguar", "Desarrollador",
             "México",
-            "Crea juegos de acción inspirados en Latinoamérica."
+            "Crea juegos de acción inspirados en Latinoamérica.",
         ),
         DeveloperProfile(
             "dev03", "Aurora Byte", "Desarrollador",
             "Canadá",
-            "Produce experiencias de estrategia y ciencia ficción."
+            "Produce experiencias de estrategia y ciencia ficción.",
         ),
         DeveloperProfile(
             "dev04", "Sakura Circuit", "Desarrollador",
             "Japón",
-            "Enfocado en carreras y juegos competitivos."
+            "Enfocado en carreras y juegos competitivos.",
         ),
         DeveloperProfile(
             "dev05", "Andes Interactive", "Desarrollador",
             "Chile",
-            "Desarrolla experiencias cooperativas y de exploración."
+            "Desarrolla experiencias cooperativas y de exploración.",
         ),
         DeveloperProfile(
             "dev06", "Emerald Owl Games", "Desarrollador",
             "Irlanda",
-            "Diseña rompecabezas y aventuras narrativas."
+            "Diseña rompecabezas y aventuras narrativas.",
         ),
         DeveloperProfile(
             "dev07", "Solaris Works", "Productor",
             "España",
-            "Publica juegos de deportes y simulación."
+            "Publica juegos de deportes y simulación.",
         ),
         DeveloperProfile(
             "dev08", "Crimson Kraken", "Estudio independiente",
             "Australia",
-            "Crea juegos de supervivencia y acción."
+            "Crea juegos de supervivencia y acción.",
         ),
         DeveloperProfile(
             "dev09", "Nordic Lantern", "Desarrollador",
             "Suecia",
-            "Especialistas en estrategia y construcción."
+            "Especialistas en estrategia y construcción.",
         ),
         DeveloperProfile(
             "dev10", "Quetzal Labs", "Desarrollador",
             "Guatemala",
-            "Estudio de juegos educativos y familiares."
-        )
+            "Estudio de juegos educativos y familiares.",
+        ),
     )
 
     private val _allProducts =
@@ -410,43 +450,47 @@ class StoreViewModel(
 
     val uiState: StateFlow<StoreUiState> = combine(
         _allProducts,
-        _searchQuery
-    ) { products, query ->
+        _searchQuery,
+        favoriteDao.observeFavoriteIds(),
+        orderLineDao.observeOrderLines(),
+        preferencesManager.preferenceFlow,
+    ) { products, query, favoriteIds, orderLines, pref ->
         val filtered = if (query.isBlank()) {
             products
         } else {
             products.filter {
                 it.name.contains(
                     query,
-                    ignoreCase = true
+                    ignoreCase = true,
                 )
             }
         }
 
         StoreUiState(
-            products = filtered,
+            products = filtered.map { product ->
+                product.copy(isFavorite = favoriteIds.contains(product.id))
+            },
             profiles = profiles,
-            searchQuery = query
+            searchQuery = query,
+            orderLines = orderLines,
+            userPreference = pref,
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = StoreUiState(
             products = _allProducts.value,
-            profiles = profiles
-        )
+            profiles = profiles,
+        ),
     )
 
     fun toggleFavorite(productId: String) {
-        _allProducts.update { products ->
-            products.map { product ->
-                if (product.id == productId) {
-                    product.copy(
-                        isFavorite = !product.isFavorite
-                    )
-                } else {
-                    product
-                }
+        viewModelScope.launch {
+            val isFav = uiState.value.products.find { it.id == productId }?.isFavorite ?: false
+            if (isFav) {
+                favoriteDao.deleteFavorite(FavoriteEntity(productId))
+            } else {
+                favoriteDao.insertFavorite(FavoriteEntity(productId))
             }
         }
     }
@@ -460,23 +504,23 @@ class StoreViewModel(
     }
 
     private fun createTestCatalog(
-        availableProfiles: List<DeveloperProfile>
+        availableProfiles: List<DeveloperProfile>,
     ): List<GameProduct> {
         val themes = listOf(
             "Crónicas", "Horizonte", "Leyendas",
             "Reinos", "Circuito", "Guardianes",
-            "Ecos", "Expedición", "Arena", "Misterios"
+            "Ecos", "Expedición", "Arena", "Misterios",
         )
         val worlds = listOf(
             "de Aether", "del Jaguar", "Neón",
             "del Norte", "Solar", "Abisal",
-            "de Jade", "Andina", "Estelar", "Esmeralda"
+            "de Jade", "Andina", "Estelar", "Esmeralda",
         )
         val genres = listOf(
             "aventura", "acción", "estrategia",
             "carreras", "rompecabezas", "simulación",
             "rol", "deportes", "supervivencia",
-            "plataformas"
+            "plataformas",
         )
 
         return List(500) { index ->
@@ -496,10 +540,8 @@ class StoreViewModel(
                             "${profile.name}.",
                 price = 9.99 + ((index * 7) % 60),
                 developerId = profile.id,
-                imageUrl =
-                    "https://picsum.photos/seed/" +
-                            "gamestore-$number/600/400",
-                isAvailable = number % 7 != 0
+                imageUrl = "https://picsum.photos/seed/gamestore-$number/600/400",
+                isAvailable = number % 7 != 0,
             )
         }
     }

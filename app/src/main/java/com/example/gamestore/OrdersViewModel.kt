@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 
 class OrdersViewModel(
-    private val orderApi: OrderApi = OrderApi()
+    private val orderApi: OrderApi = OrderApi(),
 ) : ViewModel() {
 
     private val _ordersState = MutableStateFlow<OrdersUiState>(OrdersUiState.Loading)
@@ -32,11 +32,11 @@ class OrdersViewModel(
                 } else {
                     _ordersState.value = OrdersUiState.Success(orders)
                 }
-            } catch (e: OrderHttpException) {
+            } catch (_: OrderHttpException) {
                 _ordersState.value = OrdersUiState.Error("El servidor no pudo atender la solicitud.")
-            } catch (e: SerializationException) {
+            } catch (_: SerializationException) {
                 _ordersState.value = OrdersUiState.Error("Respuesta inesperada del servidor.")
-            } catch (e: IOException) {
+            } catch (_: IOException) {
                 _ordersState.value = OrdersUiState.Error("Sin conexión. Revisa internet.")
             }
         }
@@ -48,13 +48,13 @@ class OrdersViewModel(
             try {
                 val order = orderApi.getOrderById(id)
                 _orderDetailState.value = OrdersUiState.Detail(order)
-            } catch (e: OrderNotFoundException) {
+            } catch (_: OrderNotFoundException) {
                 _orderDetailState.value = OrdersUiState.NotFound
-            } catch (e: OrderHttpException) {
+            } catch (_: OrderHttpException) {
                 _orderDetailState.value = OrdersUiState.Error("El servidor no pudo atender la solicitud.")
-            } catch (e: SerializationException) {
+            } catch (_: SerializationException) {
                 _orderDetailState.value = OrdersUiState.Error("Respuesta inesperada del servidor.")
-            } catch (e: IOException) {
+            } catch (_: IOException) {
                 _orderDetailState.value = OrdersUiState.Error("Sin conexión. Revisa internet.")
             }
         }

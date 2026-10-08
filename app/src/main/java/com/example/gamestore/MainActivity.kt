@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
                     .collectAsStateWithLifecycle()
 
                 Scaffold(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 ) { innerPadding ->
                     NavDisplay(
                         backStack = backStack,
@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
                                     backStack.removeLastOrNull()
                                 }
                             }
-                        }
+                        },
                     ) { key ->
                         NavEntry(key) {
                             when (key) {
@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
                                                 productId ->
                                             backStack.add(
                                                 StoreNavKey.Detail(
-                                                    productId
+                                                    productId,
                                                 )
                                             )
                                         },
@@ -86,19 +86,19 @@ class MainActivity : ComponentActivity() {
                                                 productId ->
                                             storeViewModel
                                                 .toggleFavorite(
-                                                    productId
+                                                    productId,
                                                 )
                                         },
                                         onQueryChange = { query ->
                                             storeViewModel
                                                 .onQueryChange(
-                                                    query
+                                                    query,
                                                 )
                                         },
                                         onClearQuery = {
                                             storeViewModel
                                                 .clearQuery()
-                                        }
+                                        },
                                     ) {
                                         /* scroll arriba */
                                     }
@@ -121,24 +121,24 @@ class MainActivity : ComponentActivity() {
                                                     productId ->
                                                 storeViewModel
                                                     .toggleFavorite(
-                                                        productId
+                                                        productId,
                                                     )
                                             },
                                             onOpenProfile = {
                                                     developerId ->
                                                 backStack.add(
                                                     StoreNavKey.Profile(
-                                                        developerId
+                                                        developerId,
                                                     )
                                                 )
-                                            }
+                                            },
                                         ) { productId ->
                                             storeViewModel
                                                 .startCheckout(
-                                                    productId
+                                                    productId,
                                                 )
                                             backStack.add(
-                                                StoreNavKey.Checkout
+                                                StoreNavKey.Checkout,
                                             )
                                         }
                                     }
@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
 
                                     profile?.let {
                                         ProfileScreen(
-                                            profile = it
+                                            profile = it,
                                         ) {
                                             backStack
                                                 .removeLastOrNull()
@@ -164,16 +164,15 @@ class MainActivity : ComponentActivity() {
 
                                 is StoreNavKey.Checkout -> {
                                     LaunchedEffect(
-                                        checkoutState.receipt?.id
+                                        checkoutState.receipt?.id,
                                     ) {
                                         if (
-                                            checkoutState.receipt != null &&
-                                            backStack.lastOrNull() ==
-                                            StoreNavKey.Checkout
+                                            (checkoutState.receipt != null) &&
+                                            (backStack.lastOrNull() == StoreNavKey.Checkout)
                                         ) {
                                             backStack.add(
                                                 StoreNavKey
-                                                    .Confirmation
+                                                    .Confirmation,
                                             )
                                         }
                                     }
@@ -206,7 +205,7 @@ class MainActivity : ComponentActivity() {
                                                 backStack
                                                     .removeLastOrNull()
                                             }
-                                        }
+                                        },
                                     )
                                 }
 
@@ -214,7 +213,7 @@ class MainActivity : ComponentActivity() {
                                     checkoutState.receipt?.let {
                                             receipt ->
                                         ConfirmationScreen(
-                                            receipt = receipt
+                                            receipt = receipt,
                                         ) {
                                             while (
                                                 backStack.size > 1
@@ -232,7 +231,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     BackHandler(
-                        enabled = backStack.size > 1
+                        enabled = backStack.size > 1,
                     ) {
                         if (!checkoutState.isSubmitting) {
                             if (

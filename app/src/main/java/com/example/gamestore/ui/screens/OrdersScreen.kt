@@ -17,7 +17,7 @@ fun OrdersScreen(
     state: OrdersUiState,
     onRetry: () -> Unit,
     onOrderSelected: (String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     Scaffold(
         topBar = {

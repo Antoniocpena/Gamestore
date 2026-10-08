@@ -17,7 +17,7 @@ sealed interface OrdersUiState {
 data class OrderSummaryDto(
     val id: String,
     val total: Double,
-    val date: String = ""
+    val date: String = "",
 )
 
 @Serializable
@@ -25,5 +25,5 @@ data class OrderDetailDto(
     val id: String,
     val lines: List<OrderLineDto> = emptyList(),
     val total: Double = 0.0,
-    val date: String = ""
+    val date: String = "",
 )

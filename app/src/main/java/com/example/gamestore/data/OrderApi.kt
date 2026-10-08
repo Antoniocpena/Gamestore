@@ -18,7 +18,7 @@ class OrderNotFoundException : IOException()
 
 class OrderApi(
     private val endpoint: String =
-        "https://6ac7d74775a4ce3fe7224a51.mockapi.io/orders"
+        "https://6ac7d74775a4ce3fe7224a51.mockapi.io/orders",
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -36,22 +36,22 @@ class OrderApi(
                 connection.doOutput = true
                 connection.setRequestProperty(
                     "Content-Type",
-                    "application/json; charset=utf-8"
+                    "application/json; charset=utf-8",
                 )
                 connection.setRequestProperty(
                     "Accept",
-                    "application/json"
+                    "application/json",
                 )
 
                 connection.outputStream.use { stream ->
                     val body = json.encodeToString(
                         CreateOrderDto.serializer(),
-                        order
+                        order,
                     )
                     stream.write(body.toByteArray(Charsets.UTF_8))
                 }
 
-                if (connection.responseCode !in 200..299) {
+                if (connection.responseCode !in (200..299)) {
                     throw OrderHttpException()
                 }
 
@@ -61,7 +61,7 @@ class OrderApi(
 
                 json.decodeFromString(
                     CreatedOrderDto.serializer(),
-                    response
+                    response,
                 ).also { created ->
                     if (created.id.isBlank()) {
                         throw SerializationException("Missing order ID")
@@ -83,10 +83,10 @@ class OrderApi(
                 connection.readTimeout = 10_000
                 connection.setRequestProperty(
                     "Accept",
-                    "application/json"
+                    "application/json",
                 )
 
-                if (connection.responseCode !in 200..299) {
+                if (connection.responseCode !in (200..299)) {
                     throw OrderHttpException()
                 }
 
@@ -96,7 +96,7 @@ class OrderApi(
 
                 json.decodeFromString(
                     ListSerializer(OrderSummaryDto.serializer()),
-                    response
+                    response,
                 )
             } finally {
                 connection.disconnect()
@@ -114,14 +114,14 @@ class OrderApi(
                 connection.readTimeout = 10_000
                 connection.setRequestProperty(
                     "Accept",
-                    "application/json"
+                    "application/json",
                 )
 
                 if (connection.responseCode == 404) {
                     throw OrderNotFoundException()
                 }
 
-                if (connection.responseCode !in 200..299) {
+                if (connection.responseCode !in (200..299)) {
                     throw OrderHttpException()
                 }
 
@@ -131,7 +131,7 @@ class OrderApi(
 
                 json.decodeFromString(
                     OrderDetailDto.serializer(),
-                    response
+                    response,
                 )
             } finally {
                 connection.disconnect()

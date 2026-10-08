@@ -13,7 +13,7 @@ import com.example.gamestore.ui.state.OrdersUiState
 @Composable
 fun OrderDetailScreen(
     state: OrdersUiState,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     Scaffold(
         topBar = {

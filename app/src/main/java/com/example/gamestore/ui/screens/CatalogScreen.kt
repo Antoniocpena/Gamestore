@@ -55,7 +55,7 @@ fun CatalogScreen(
     onProductSelected: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onQueryChange: (String) -> Unit,
-    onClearQuery: () -> Unit,
+    onClearQuery: (String) -> Unit = {},
     onScrollTop: () -> Unit,
 ) {
     var renderMode by rememberSaveable { mutableStateOf(CatalogRenderMode.LAZY_GRID) }
@@ -68,7 +68,7 @@ fun CatalogScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Catálogo (${products.size})") }
+                title = { Text("Catálogo (${products.size})") },
             )
         },
         floatingActionButton = {
@@ -82,7 +82,6 @@ fun CatalogScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // 🔹 Campo de búsqueda mejorado
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onQueryChange,
@@ -93,7 +92,7 @@ fun CatalogScreen(
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = onClearQuery) {
+                        IconButton(onClick = { onClearQuery("") }) {
                             Icon(Icons.Default.Clear, contentDescription = "Limpiar búsqueda")
                         }
                     }

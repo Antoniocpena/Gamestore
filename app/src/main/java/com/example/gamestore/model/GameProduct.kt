@@ -8,5 +8,5 @@ data class GameProduct(
     val developerId: String,
     val imageUrl: String,
     val isAvailable: Boolean,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
 )

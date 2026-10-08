@@ -54,8 +54,11 @@ class MainActivity : ComponentActivity() {
                             when (key) {
                                 is StoreNavKey.Catalog -> {
                                     CatalogScreen(
-                                        products = uiState.products,
+                                        products = uiState.visibleProducts,
                                         searchQuery = uiState.searchQuery,
+                                        catalogPosition = uiState.catalogPosition,
+                                        orderItemCount = uiState.orderItemCount,
+                                        formattedOrderTotal = uiState.formattedOrderTotal,
                                         onProductSelected = { productId ->
                                             backStack.add(
                                                 StoreNavKey.Detail(productId)
@@ -82,6 +85,7 @@ class MainActivity : ComponentActivity() {
                                         }
 
                                     product?.let {
+                                        val orderLine = uiState.orderLine(it.id)
                                         DetailScreen(
                                             product = it,
                                             onBack = {

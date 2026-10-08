@@ -4,9 +4,12 @@ data class GameProduct(
     val id: String,
     val name: String,
     val description: String,
-    val price: Double,
+    val priceCents: Long,
     val developerId: String,
-    val imageUrl: String,
-    val isAvailable: Boolean,
-    val isFavorite: Boolean = false
-)
+    val stock: Int,
+    val coverColorIndex: Int,
+    val isFavorite: Boolean = false,
+) {
+    val isAvailable: Boolean
+        get() = stock > 0
+}

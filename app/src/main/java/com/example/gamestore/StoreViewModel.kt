@@ -12,10 +12,8 @@ import com.example.gamestore.ui.state.CheckoutUiState
 import com.example.gamestore.ui.state.StoreUiState
 import com.example.gamestore.validation.CheckoutValidators
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 class StoreViewModel : ViewModel() {
@@ -179,24 +177,28 @@ class StoreViewModel : ViewModel() {
         )
     )
 
+    val uiState: StateFlow<StoreUiState> = _uiState.asStateFlow()
+
     fun toggleFavorite(productId: String) {
-        _allProducts.update { currentProducts ->
-            currentProducts.map { product ->
-                if (product.id == productId) {
-                    product.copy(isFavorite = !product.isFavorite)
-                } else {
-                    product
-                }
-            }
+        _uiState.update { state ->
+            state.copy(
+                catalog = state.catalog.map { product ->
+                    if (product.id == productId) {
+                        product.copy(isFavorite = !product.isFavorite)
+                    } else {
+                        product
+                    }
+                },
+            )
         }
     }
 
     fun onQueryChange(newQuery: String) {
-        _searchQuery.value = newQuery
+        _uiState.update { it.copy(searchQuery = newQuery) }
     }
 
     fun clearQuery() {
-        _searchQuery.value = ""
+        onQueryChange("")
     }
 
     private fun createTestCatalog(
@@ -206,20 +208,67 @@ class StoreViewModel : ViewModel() {
         val worlds = listOf("de Aether","del Jaguar","Neón","del Norte","Solar","Abisal","de Jade","Andina","Estelar","Esmeralda")
         val genres = listOf("aventura","acción","estrategia","carreras","rompecabezas","simulación","rol","deportes","supervivencia","plataformas")
 
-        return List(500) { index ->
-            val number = index + 1
-            val profile = availableProfiles[index % availableProfiles.size]
-            val genre = genres[index % genres.size]
-
-            GameProduct(
-                id = "game-%03d".format(number),
-                name = "${themes[index % themes.size]} ${worlds[(index / themes.size) % worlds.size]} #$number",
-                description = "Videojuego de $genre desarrollado por ${profile.name}.",
-                price = 9.99 + ((index * 7) % 60),
-                developerId = profile.id,
-                imageUrl = "https://picsum.photos/seed/gamestore-$number/600/400",
-                isAvailable = number % 7 != 0
+    fun removeFromOrder(productId: String): OrderOperationResult =
+        applyOrderOperation(successMessage = "Producto eliminado del pedido.") { state ->
+            removeProductFromOrder(
+                order = state.order,
+                productId = productId,
             )
+        }
+
+    fun updateQuantity(productId: String, quantity: Int): OrderOperationResult =
+        applyOrderOperation(successMessage = "Cantidad actualizada.") { state ->
+            updateProductQuantity(
+                catalog = state.catalog,
+                order = state.order,
+                productId = productId,
+                quantity = quantity,
+            )
+        }
+
+    fun updateLazyCatalogPosition(firstVisibleItemIndex: Int, scrollOffset: Int) {
+        _uiState.update { state ->
+            val updatedPosition = state.catalogPosition.copy(
+                lazyFirstVisibleItemIndex = firstVisibleItemIndex.coerceAtLeast(0),
+                lazyFirstVisibleItemScrollOffset = scrollOffset.coerceAtLeast(0),
+            )
+            if (updatedPosition == state.catalogPosition) state else state.copy(catalogPosition = updatedPosition)
+        }
+    }
+
+    fun updateConventionalCatalogPosition(scrollOffset: Int) {
+        _uiState.update { state ->
+            val updatedPosition = state.catalogPosition.copy(
+                conventionalScrollOffset = scrollOffset.coerceAtLeast(0),
+            )
+            if (updatedPosition == state.catalogPosition) state else state.copy(catalogPosition = updatedPosition)
+        }
+    }
+
+    fun clearOrderFeedback() {
+        _uiState.update { it.copy(orderFeedback = null) }
+    }
+
+    private fun applyOrderOperation(
+        successMessage: String,
+        operation: (StoreUiState) -> OrderOperationResult,
+    ): OrderOperationResult {
+        while (true) {
+            val currentState = _uiState.value
+            val result = operation(currentState)
+            val updatedState = when (result) {
+                is OrderOperationResult.Accepted -> currentState.copy(
+                    order = result.order,
+                    orderFeedback = OrderFeedback(message = successMessage, isError = false),
+                )
+
+                is OrderOperationResult.Rejected -> currentState.copy(
+                    orderFeedback = OrderFeedback(message = result.reason.message, isError = true),
+                )
+            }
+            if (_uiState.compareAndSet(currentState, updatedState)) {
+                return result
+            }
         }
     }
 }

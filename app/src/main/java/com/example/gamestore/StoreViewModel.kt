@@ -1,24 +1,180 @@
 package com.example.gamestore
 
 import androidx.lifecycle.ViewModel
-import com.example.gamestore.data.TestCatalog
-import com.example.gamestore.domain.OrderOperationResult
-import com.example.gamestore.domain.addToOrder as addProductToOrder
-import com.example.gamestore.domain.removeFromOrder as removeProductFromOrder
-import com.example.gamestore.domain.updateQuantity as updateProductQuantity
-import com.example.gamestore.ui.state.OrderFeedback
+import androidx.lifecycle.viewModelScope
+import com.example.gamestore.model.BillingType
+import com.example.gamestore.model.DeveloperProfile
+import com.example.gamestore.model.GameProduct
+import com.example.gamestore.model.OrderReceipt
+import com.example.gamestore.model.PaymentMethod
+import com.example.gamestore.ui.state.CheckoutField
+import com.example.gamestore.ui.state.CheckoutUiState
 import com.example.gamestore.ui.state.StoreUiState
+import com.example.gamestore.validation.CheckoutValidators
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 class StoreViewModel : ViewModel() {
-    private val _uiState = MutableStateFlow(
+
+    private val _checkoutState = MutableStateFlow(CheckoutUiState())
+    val checkoutState: StateFlow<CheckoutUiState> = _checkoutState
+
+    fun startCheckout(productId: String) {
+        _checkoutState.update {
+            CheckoutUiState(productId = productId)
+        }
+    }
+
+    fun onCheckoutFieldChange(field: CheckoutField, value: String) {
+        _checkoutState.update { currentState ->
+            val updated = when (field) {
+                CheckoutField.NAME -> currentState.copy(name = value)
+                CheckoutField.PHONE -> currentState.copy(phone = value)
+                CheckoutField.NIT -> currentState.copy(nit = value)
+                CheckoutField.BUSINESS_NAME -> currentState.copy(businessName = value)
+            }
+            revalidateAll(updated)
+        }
+    }
+
+    fun onCheckoutFieldTouched(field: CheckoutField) {
+        _checkoutState.update { currentState ->
+            val updated = when (field) {
+                CheckoutField.NAME -> currentState.copy(isNameTouched = true)
+                CheckoutField.PHONE -> currentState.copy(isPhoneTouched = true)
+                CheckoutField.NIT -> currentState.copy(isNitTouched = true)
+                CheckoutField.BUSINESS_NAME -> currentState.copy(isBusinessNameTouched = true)
+            }
+            revalidateAll(updated)
+        }
+    }
+
+    fun onBillingTypeChange(type: BillingType) {
+        _checkoutState.update { currentState ->
+            val updated = if (type == BillingType.CF) {
+                currentState.copy(
+                    billingType = type,
+                    nit = "",
+                    businessName = "",
+                    nitError = null,
+                    businessNameError = null,
+                    isNitTouched = false,
+                    isBusinessNameTouched = false
+                )
+            } else {
+                currentState.copy(billingType = type)
+            }
+            revalidateAll(updated)
+        }
+    }
+
+    fun onPaymentMethodChange(method: PaymentMethod) {
+        _checkoutState.update { it.copy(paymentMethod = method) }
+    }
+
+    private fun revalidateAll(state: CheckoutUiState): CheckoutUiState {
+        val nameError = if (state.isNameTouched) CheckoutValidators.name(state.name) else null
+        val phoneError = if (state.isPhoneTouched) CheckoutValidators.phone(state.phone) else null
+        val nitError = if (state.billingType == BillingType.NIT && state.isNitTouched) CheckoutValidators.nit(state.nit) else null
+        val businessNameError = if (state.billingType == BillingType.NIT && state.isBusinessNameTouched) CheckoutValidators.businessName(state.businessName) else null
+
+        return state.copy(
+            nameError = nameError,
+            phoneError = phoneError,
+            nitError = nitError,
+            businessNameError = businessNameError
+        )
+    }
+
+    fun submitOrder() {
+        val currentState = _checkoutState.value
+        val nameErr = CheckoutValidators.name(currentState.name)
+        val phoneErr = CheckoutValidators.phone(currentState.phone)
+        val nitErr = if (currentState.billingType == BillingType.NIT) CheckoutValidators.nit(currentState.nit) else null
+        val busErr = if (currentState.billingType == BillingType.NIT) CheckoutValidators.businessName(currentState.businessName) else null
+
+        if (nameErr != null || phoneErr != null || nitErr != null || busErr != null || currentState.productId == null) {
+            _checkoutState.update {
+                it.copy(
+                    isNameTouched = true,
+                    isPhoneTouched = true,
+                    isNitTouched = true,
+                    isBusinessNameTouched = true,
+                    nameError = nameErr,
+                    phoneError = phoneErr,
+                    nitError = nitErr,
+                    businessNameError = busErr
+                )
+            }
+            return
+        }
+
+        val product = _allProducts.value.find { it.id == currentState.productId } ?: return
+
+        val receipt = OrderReceipt(
+            id = "REC-${System.currentTimeMillis().toString().takeLast(6)}",
+            productId = product.id,
+            productName = product.name,
+            total = product.price,
+            customerName = currentState.name,
+            phone = currentState.phone,
+            billingType = currentState.billingType,
+            nit = if (currentState.billingType == BillingType.NIT) currentState.nit else null,
+            businessName = if (currentState.billingType == BillingType.NIT) currentState.businessName else null,
+            paymentMethod = currentState.paymentMethod
+        )
+
+        _checkoutState.update {
+            it.copy(receipt = receipt)
+        }
+    }
+
+    // ----------------------------
+    // Catálogo y búsqueda
+    // ----------------------------
+
+    private val profiles = listOf(
+        DeveloperProfile("dev01", "Nebula Forge", "Estudio independiente", "Guatemala", "Especialistas en aventuras y mundos de fantasía."),
+        DeveloperProfile("dev02", "Pixel Jaguar", "Desarrollador", "México", "Crea juegos de acción inspirados en Latinoamérica."),
+        DeveloperProfile("dev03", "Aurora Byte", "Desarrollador", "Canadá", "Produce experiencias de estrategia y ciencia ficción."),
+        DeveloperProfile("dev04", "Sakura Circuit", "Desarrollador", "Japón", "Estudio enfocado en carreras y juegos competitivos."),
+        DeveloperProfile("dev05", "Andes Interactive", "Desarrollador", "Chile", "Desarrolla experiencias cooperativas y de exploración."),
+        DeveloperProfile("dev06", "Emerald Owl Games", "Desarrollador", "Irlanda", "Diseña rompecabezas y aventuras narrativas."),
+        DeveloperProfile("dev07", "Solaris Works", "Productor", "España", "Publica juegos de deportes y simulación."),
+        DeveloperProfile("dev08", "Crimson Kraken", "Estudio independiente", "Australia", "Crea juegos de supervivencia y acción."),
+        DeveloperProfile("dev09", "Nordic Lantern", "Desarrollador", "Suecia", "Especialistas en estrategia y construcción."),
+        DeveloperProfile("dev10", "Quetzal Labs", "Desarrollador", "Guatemala", "Estudio de juegos educativos y familiares.")
+    )
+
+    private val _allProducts = MutableStateFlow(createTestCatalog(profiles))
+    private val _searchQuery = MutableStateFlow("")
+
+    val uiState: StateFlow<StoreUiState> = combine(
+        _allProducts,
+        _searchQuery
+    ) { products, query ->
+        val filtered = if (query.isBlank()) {
+            products
+        } else {
+            products.filter {
+                it.name.contains(query, ignoreCase = true)
+            }
+        }
+
         StoreUiState(
-            catalog = TestCatalog.createProducts(),
-            profiles = TestCatalog.profiles,
-        ),
+            products = filtered,
+            profiles = profiles,
+            searchQuery = query
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = StoreUiState(
+            products = _allProducts.value,
+            profiles = profiles
+        )
     )
 
     val uiState: StateFlow<StoreUiState> = _uiState.asStateFlow()
@@ -45,15 +201,12 @@ class StoreViewModel : ViewModel() {
         onQueryChange("")
     }
 
-    fun addToOrder(productId: String, quantity: Int = 1): OrderOperationResult =
-        applyOrderOperation(successMessage = "Producto agregado al pedido.") { state ->
-            addProductToOrder(
-                catalog = state.catalog,
-                order = state.order,
-                productId = productId,
-                quantity = quantity,
-            )
-        }
+    private fun createTestCatalog(
+        availableProfiles: List<DeveloperProfile>
+    ): List<GameProduct> {
+        val themes = listOf("Crónicas","Horizonte","Leyendas","Reinos","Circuito","Guardianes","Ecos","Expedición","Arena","Misterios")
+        val worlds = listOf("de Aether","del Jaguar","Neón","del Norte","Solar","Abisal","de Jade","Andina","Estelar","Esmeralda")
+        val genres = listOf("aventura","acción","estrategia","carreras","rompecabezas","simulación","rol","deportes","supervivencia","plataformas")
 
     fun removeFromOrder(productId: String): OrderOperationResult =
         applyOrderOperation(successMessage = "Producto eliminado del pedido.") { state ->

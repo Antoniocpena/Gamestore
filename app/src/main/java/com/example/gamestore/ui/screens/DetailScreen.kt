@@ -77,9 +77,9 @@ fun DetailScreen(
                 Text("Ver perfil del desarrollador")
             }
 
-            Button(
-                onClick = { onAddToOrder(product.id) },
-                enabled = product.isAvailable && quantityInOrder < product.stock,
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {onAddToOrder(product.id)},
+                enabled = product.isAvailable
             ) {
                 Text("Agregar al pedido")
             }

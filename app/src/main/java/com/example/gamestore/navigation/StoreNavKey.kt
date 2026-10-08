@@ -4,6 +4,7 @@ import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
 sealed interface StoreNavKey : NavKey {
+
     @Serializable
     data object Catalog : StoreNavKey
 
@@ -12,4 +13,7 @@ sealed interface StoreNavKey : NavKey {
 
     @Serializable
     data class Profile(val developerId: String) : StoreNavKey
+
+    @Serializable
+    data object Checkout : StoreNavKey
 }

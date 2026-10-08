@@ -24,113 +24,148 @@ class StoreViewModel : ViewModel() {
     val checkoutState: StateFlow<CheckoutUiState> = _checkoutState
 
     fun startCheckout(productId: String) {
-        _checkoutState.update {
-            CheckoutUiState(productId = productId)
-        }
+        val selectedProductId = _allProducts.value
+            .find { product -> product.id == productId }
+            ?.id
+
+        _checkoutState.value = CheckoutUiState(
+            productId = selectedProductId,
+        )
     }
 
     fun onCheckoutFieldChange(field: CheckoutField, value: String) {
         _checkoutState.update { currentState ->
-            val updated = when (field) {
+            val updatedState = when (field) {
                 CheckoutField.NAME -> currentState.copy(name = value)
                 CheckoutField.PHONE -> currentState.copy(phone = value)
                 CheckoutField.NIT -> currentState.copy(nit = value)
                 CheckoutField.BUSINESS_NAME -> currentState.copy(businessName = value)
             }
-            revalidateAll(updated)
+
+            validateCheckoutState(updatedState)
         }
     }
 
     fun onCheckoutFieldTouched(field: CheckoutField) {
         _checkoutState.update { currentState ->
-            val updated = when (field) {
-                CheckoutField.NAME -> currentState.copy(isNameTouched = true)
-                CheckoutField.PHONE -> currentState.copy(isPhoneTouched = true)
-                CheckoutField.NIT -> currentState.copy(isNitTouched = true)
-                CheckoutField.BUSINESS_NAME -> currentState.copy(isBusinessNameTouched = true)
-            }
-            revalidateAll(updated)
+            validateCheckoutState(
+                currentState.copy(
+                    touchedFields = currentState.touchedFields + field,
+                ),
+            )
         }
     }
 
     fun onBillingTypeChange(type: BillingType) {
         _checkoutState.update { currentState ->
-            val updated = if (type == BillingType.CF) {
+            val updatedState = if (type == BillingType.CF) {
                 currentState.copy(
                     billingType = type,
                     nit = "",
                     businessName = "",
-                    nitError = null,
-                    businessNameError = null,
-                    isNitTouched = false,
-                    isBusinessNameTouched = false
+                    touchedFields = currentState.touchedFields -
+                        CheckoutField.NIT - CheckoutField.BUSINESS_NAME,
                 )
             } else {
                 currentState.copy(billingType = type)
             }
-            revalidateAll(updated)
+
+            validateCheckoutState(updatedState)
         }
     }
 
     fun onPaymentMethodChange(method: PaymentMethod) {
-        _checkoutState.update { it.copy(paymentMethod = method) }
-    }
-
-    private fun revalidateAll(state: CheckoutUiState): CheckoutUiState {
-        val nameError = if (state.isNameTouched) CheckoutValidators.name(state.name) else null
-        val phoneError = if (state.isPhoneTouched) CheckoutValidators.phone(state.phone) else null
-        val nitError = if (state.billingType == BillingType.NIT && state.isNitTouched) CheckoutValidators.nit(state.nit) else null
-        val businessNameError = if (state.billingType == BillingType.NIT && state.isBusinessNameTouched) CheckoutValidators.businessName(state.businessName) else null
-
-        return state.copy(
-            nameError = nameError,
-            phoneError = phoneError,
-            nitError = nitError,
-            businessNameError = businessNameError
-        )
+        _checkoutState.update { currentState ->
+            validateCheckoutState(
+                currentState.copy(paymentMethod = method),
+            )
+        }
     }
 
     fun submitOrder() {
         val currentState = _checkoutState.value
-        val nameErr = CheckoutValidators.name(currentState.name)
-        val phoneErr = CheckoutValidators.phone(currentState.phone)
-        val nitErr = if (currentState.billingType == BillingType.NIT) CheckoutValidators.nit(currentState.nit) else null
-        val busErr = if (currentState.billingType == BillingType.NIT) CheckoutValidators.businessName(currentState.businessName) else null
+        val requiredFields = buildSet {
+            add(CheckoutField.NAME)
+            add(CheckoutField.PHONE)
 
-        if (nameErr != null || phoneErr != null || nitErr != null || busErr != null || currentState.productId == null) {
-            _checkoutState.update {
-                it.copy(
-                    isNameTouched = true,
-                    isPhoneTouched = true,
-                    isNitTouched = true,
-                    isBusinessNameTouched = true,
-                    nameError = nameErr,
-                    phoneError = phoneErr,
-                    nitError = nitErr,
-                    businessNameError = busErr
-                )
+            if (currentState.billingType == BillingType.NIT) {
+                add(CheckoutField.NIT)
+                add(CheckoutField.BUSINESS_NAME)
             }
+        }
+
+        val validatedState = validateCheckoutState(
+            currentState.copy(
+                touchedFields = currentState.touchedFields + requiredFields,
+            ),
+        )
+        val selectedProduct = validatedState.productId?.let { productId ->
+            _allProducts.value.find { product -> product.id == productId }
+        }
+
+        if (!validatedState.isFormValid || selectedProduct == null) {
+            _checkoutState.value = validatedState
             return
         }
 
-        val product = _allProducts.value.find { it.id == currentState.productId } ?: return
-
         val receipt = OrderReceipt(
-            id = "REC-${System.currentTimeMillis().toString().takeLast(6)}",
-            productId = product.id,
-            productName = product.name,
-            total = product.price,
-            customerName = currentState.name,
-            phone = currentState.phone,
-            billingType = currentState.billingType,
-            nit = if (currentState.billingType == BillingType.NIT) currentState.nit else null,
-            businessName = if (currentState.billingType == BillingType.NIT) currentState.businessName else null,
-            paymentMethod = currentState.paymentMethod
+            id = "order-${System.currentTimeMillis()}",
+            productId = selectedProduct.id,
+            productName = selectedProduct.name,
+            total = selectedProduct.price,
+            customerName = validatedState.name.trim(),
+            phone = validatedState.phone,
+            billingType = validatedState.billingType,
+            nit = if (validatedState.billingType == BillingType.NIT) {
+                validatedState.nit.trim()
+            } else {
+                null
+            },
+            businessName = if (validatedState.billingType == BillingType.NIT) {
+                validatedState.businessName.trim()
+            } else {
+                null
+            },
+            paymentMethod = validatedState.paymentMethod,
         )
 
-        _checkoutState.update {
-            it.copy(receipt = receipt)
+        _checkoutState.value = validatedState.copy(receipt = receipt)
+    }
+
+    private fun validateCheckoutState(state: CheckoutUiState): CheckoutUiState {
+        val nameValidation = CheckoutValidators.name(state.name)
+        val phoneValidation = CheckoutValidators.phone(state.phone)
+        val nitValidation = if (state.billingType == BillingType.NIT) {
+            CheckoutValidators.nit(state.nit)
+        } else {
+            null
         }
+        val businessNameValidation = if (state.billingType == BillingType.NIT) {
+            CheckoutValidators.businessName(state.businessName)
+        } else {
+            null
+        }
+
+        val isFormValid = nameValidation == null &&
+            phoneValidation == null &&
+            nitValidation == null &&
+            businessNameValidation == null
+
+        return state.copy(
+            nameError = nameValidation.takeIf {
+                CheckoutField.NAME in state.touchedFields
+            },
+            phoneError = phoneValidation.takeIf {
+                CheckoutField.PHONE in state.touchedFields
+            },
+            nitError = nitValidation.takeIf {
+                CheckoutField.NIT in state.touchedFields
+            },
+            businessNameError = businessNameValidation.takeIf {
+                CheckoutField.BUSINESS_NAME in state.touchedFields
+            },
+            isFormValid = isFormValid,
+        )
     }
 
     // ----------------------------

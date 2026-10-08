@@ -5,9 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.gamestore.model.BillingType
 import com.example.gamestore.model.DeveloperProfile
 import com.example.gamestore.model.GameProduct
+import com.example.gamestore.model.OrderReceipt
 import com.example.gamestore.model.PaymentMethod
-import com.example.gamestore.ui.state.StoreUiState
+import com.example.gamestore.ui.state.CheckoutField
 import com.example.gamestore.ui.state.CheckoutUiState
+import com.example.gamestore.ui.state.StoreUiState
+import com.example.gamestore.validation.CheckoutValidators
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,95 +20,116 @@ import kotlinx.coroutines.flow.update
 
 class StoreViewModel : ViewModel() {
 
-    private val _checkoutUiState = MutableStateFlow(CheckoutUiState())
-    val checkoutUiState: StateFlow<CheckoutUiState> = _checkoutUiState
+    private val _checkoutState = MutableStateFlow(CheckoutUiState())
+    val checkoutState: StateFlow<CheckoutUiState> = _checkoutState
 
-    private fun validateName(name: String): String? {
-        val letters = name.filter { it.isLetter() }
-        return if (letters.length < 3 || name.any { it.isDigit() }) {
-            "Debe tener al menos 3 letras y sin números"
-        } else null
+    fun startCheckout(productId: String) {
+        _checkoutState.update {
+            CheckoutUiState(productId = productId)
+        }
     }
 
-    private fun validatePhone(phone: String): String? {
-        return if (phone.length != 8 || phone.any { !it.isDigit() }) {
-            "Debe tener exactamente 8 dígitos"
-        } else null
+    fun onCheckoutFieldChange(field: CheckoutField, value: String) {
+        _checkoutState.update { currentState ->
+            val updated = when (field) {
+                CheckoutField.NAME -> currentState.copy(name = value)
+                CheckoutField.PHONE -> currentState.copy(phone = value)
+                CheckoutField.NIT -> currentState.copy(nit = value)
+                CheckoutField.BUSINESS_NAME -> currentState.copy(businessName = value)
+            }
+            revalidateAll(updated)
+        }
     }
 
-    private fun validateNit(nit: String): String? {
-        return if (nit.length < 5 || nit.any { !it.isDigit() }) {
-            "Ingrese al menos 5 dígitos"
-        } else null
-    }
-
-    private fun validateRazonSocial(razon: String): String? {
-        return if (razon.trim().length < 3) {
-            "Debe tener al menos 3 caracteres"
-        } else null
-    }
-
-    fun onNameChange(newName: String) {
-        _checkoutUiState.update { it.copy(fullName = newName, isTouched = it.isTouched + ("name" to true)) }
-        validateForm()
-    }
-
-    fun onPhoneChange(newPhone: String) {
-        _checkoutUiState.update { it.copy(phone = newPhone, isTouched = it.isTouched + ("phone" to true)) }
-        validateForm()
+    fun onCheckoutFieldTouched(field: CheckoutField) {
+        _checkoutState.update { currentState ->
+            val updated = when (field) {
+                CheckoutField.NAME -> currentState.copy(isNameTouched = true)
+                CheckoutField.PHONE -> currentState.copy(isPhoneTouched = true)
+                CheckoutField.NIT -> currentState.copy(isNitTouched = true)
+                CheckoutField.BUSINESS_NAME -> currentState.copy(isBusinessNameTouched = true)
+            }
+            revalidateAll(updated)
+        }
     }
 
     fun onBillingTypeChange(type: BillingType) {
-        _checkoutUiState.update {
-            if (type == BillingType.CF) {
-                it.copy(
+        _checkoutState.update { currentState ->
+            val updated = if (type == BillingType.CF) {
+                currentState.copy(
                     billingType = type,
                     nit = "",
-                    razonSocial = "",
-                    errors = it.errors + ("nit" to null) + ("razon" to null),
-                    isTouched = it.isTouched + ("nit" to false) + ("razon" to false)
+                    businessName = "",
+                    nitError = null,
+                    businessNameError = null,
+                    isNitTouched = false,
+                    isBusinessNameTouched = false
                 )
             } else {
-                it.copy(billingType = type)
+                currentState.copy(billingType = type)
             }
+            revalidateAll(updated)
         }
-        validateForm()
-    }
-
-    fun onNitChange(newNit: String) {
-        _checkoutUiState.update { it.copy(nit = newNit, isTouched = it.isTouched + ("nit" to true)) }
-        validateForm()
-    }
-
-    fun onRazonSocialChange(newRazon: String) {
-        _checkoutUiState.update { it.copy(razonSocial = newRazon, isTouched = it.isTouched + ("razon" to true)) }
-        validateForm()
     }
 
     fun onPaymentMethodChange(method: PaymentMethod) {
-        _checkoutUiState.update { it.copy(paymentMethod = method) }
-        validateForm()
+        _checkoutState.update { it.copy(paymentMethod = method) }
     }
 
-    private fun validateForm() {
-        val state = _checkoutUiState.value
-        val errors = mutableMapOf<String, String?>()
+    private fun revalidateAll(state: CheckoutUiState): CheckoutUiState {
+        val nameError = if (state.isNameTouched) CheckoutValidators.name(state.name) else null
+        val phoneError = if (state.isPhoneTouched) CheckoutValidators.phone(state.phone) else null
+        val nitError = if (state.billingType == BillingType.NIT && state.isNitTouched) CheckoutValidators.nit(state.nit) else null
+        val businessNameError = if (state.billingType == BillingType.NIT && state.isBusinessNameTouched) CheckoutValidators.businessName(state.businessName) else null
 
-        errors["name"] = validateName(state.fullName)
-        errors["phone"] = validatePhone(state.phone)
+        return state.copy(
+            nameError = nameError,
+            phoneError = phoneError,
+            nitError = nitError,
+            businessNameError = businessNameError
+        )
+    }
 
-        if (state.billingType == BillingType.NIT) {
-            errors["nit"] = validateNit(state.nit)
-            errors["razon"] = validateRazonSocial(state.razonSocial)
-        } else {
-            errors["nit"] = null
-            errors["razon"] = null
+    fun submitOrder() {
+        val currentState = _checkoutState.value
+        val nameErr = CheckoutValidators.name(currentState.name)
+        val phoneErr = CheckoutValidators.phone(currentState.phone)
+        val nitErr = if (currentState.billingType == BillingType.NIT) CheckoutValidators.nit(currentState.nit) else null
+        val busErr = if (currentState.billingType == BillingType.NIT) CheckoutValidators.businessName(currentState.businessName) else null
+
+        if (nameErr != null || phoneErr != null || nitErr != null || busErr != null || currentState.productId == null) {
+            _checkoutState.update {
+                it.copy(
+                    isNameTouched = true,
+                    isPhoneTouched = true,
+                    isNitTouched = true,
+                    isBusinessNameTouched = true,
+                    nameError = nameErr,
+                    phoneError = phoneErr,
+                    nitError = nitErr,
+                    businessNameError = busErr
+                )
+            }
+            return
         }
 
-        val isValid = errors.values.all { it == null }
+        val product = _allProducts.value.find { it.id == currentState.productId } ?: return
 
-        _checkoutUiState.update {
-            it.copy(errors = errors, isFormValid = isValid)
+        val receipt = OrderReceipt(
+            id = "REC-${System.currentTimeMillis().toString().takeLast(6)}",
+            productId = product.id,
+            productName = product.name,
+            total = product.price,
+            customerName = currentState.name,
+            phone = currentState.phone,
+            billingType = currentState.billingType,
+            nit = if (currentState.billingType == BillingType.NIT) currentState.nit else null,
+            businessName = if (currentState.billingType == BillingType.NIT) currentState.businessName else null,
+            paymentMethod = currentState.paymentMethod
+        )
+
+        _checkoutState.update {
+            it.copy(receipt = receipt)
         }
     }
 

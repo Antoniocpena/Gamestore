@@ -2,15 +2,19 @@ package com.example.gamestore.data
 
 import com.example.gamestore.model.CreateOrderDto
 import com.example.gamestore.model.CreatedOrderDto
+import com.example.gamestore.ui.state.OrderDetailDto
+import com.example.gamestore.ui.state.OrderSummaryDto
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 class OrderHttpException : IOException()
+class OrderNotFoundException : IOException()
 
 class OrderApi(
     private val endpoint: String =
@@ -63,6 +67,72 @@ class OrderApi(
                         throw SerializationException("Missing order ID")
                     }
                 }
+            } finally {
+                connection.disconnect()
+            }
+        }
+
+    suspend fun getOrders(): List<OrderSummaryDto> =
+        withContext(Dispatchers.IO) {
+            val connection =
+                URL(endpoint).openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 10_000
+                connection.readTimeout = 10_000
+                connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+                )
+
+                if (connection.responseCode !in 200..299) {
+                    throw OrderHttpException()
+                }
+
+                val response = connection.inputStream
+                    .bufferedReader()
+                    .use { it.readText() }
+
+                json.decodeFromString(
+                    ListSerializer(OrderSummaryDto.serializer()),
+                    response
+                )
+            } finally {
+                connection.disconnect()
+            }
+        }
+
+    suspend fun getOrderById(id: String): OrderDetailDto =
+        withContext(Dispatchers.IO) {
+            val connection =
+                URL("$endpoint/$id").openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 10_000
+                connection.readTimeout = 10_000
+                connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+                )
+
+                if (connection.responseCode == 404) {
+                    throw OrderNotFoundException()
+                }
+
+                if (connection.responseCode !in 200..299) {
+                    throw OrderHttpException()
+                }
+
+                val response = connection.inputStream
+                    .bufferedReader()
+                    .use { it.readText() }
+
+                json.decodeFromString(
+                    OrderDetailDto.serializer(),
+                    response
+                )
             } finally {
                 connection.disconnect()
             }

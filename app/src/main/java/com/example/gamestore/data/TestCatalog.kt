@@ -32,8 +32,10 @@ object TestCatalog {
                 id = String.format(Locale.US, "game-%03d", number),
                 name = "${themes[index % themes.size]} ${worlds[(index / themes.size) % worlds.size]} #$number",
                 description = "Videojuego de $genre desarrollado por ${profile.name}.",
-                priceCents = 999L + ((index * 7) % 60) * 100L,
+                price = (999L + ((index * 7) % 60) * 100L) / 100.0,
                 developerId = profile.id,
+                imageUrl = "https://picsum.photos/seed/gamestore-$number/600/400",
+                isAvailable = number % 7 != 0,
                 stock = if (number % 7 == 0) 0 else 1 + ((index * 3) % 25),
                 coverColorIndex = index % profiles.size,
             )

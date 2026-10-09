@@ -9,5 +9,5 @@ data class StoreUiState(
     val profiles: List<DeveloperProfile> = emptyList(),
     val searchQuery: String = "",
     val orderLines: List<OrderLineEntity> = emptyList(),
-    val userPreference: String = "default",
+    val isDarkTheme: Boolean? = null,
 )

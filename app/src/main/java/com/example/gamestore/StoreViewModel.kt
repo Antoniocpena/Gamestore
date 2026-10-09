@@ -48,7 +48,7 @@ class StoreViewModel @JvmOverloads constructor(
     private val orderLineDao = db.orderLineDao()
 
     private val preferencesManager = PreferencesManager(application)
-    val preferenceFlow = preferencesManager.preferenceFlow
+    val darkThemeFlow = preferencesManager.darkThemeFlow
 
     private val _checkoutState = MutableStateFlow(CheckoutUiState())
     val checkoutState: StateFlow<CheckoutUiState> = _checkoutState
@@ -73,9 +73,9 @@ class StoreViewModel @JvmOverloads constructor(
         }
     }
 
-    fun setPreference(value: String) {
+    fun setDarkTheme(enabled: Boolean) {
         viewModelScope.launch {
-            preferencesManager.setPreference(value)
+            preferencesManager.setDarkTheme(enabled)
         }
     }
 
@@ -453,7 +453,7 @@ class StoreViewModel @JvmOverloads constructor(
         _searchQuery,
         favoriteDao.observeFavoriteIds(),
         orderLineDao.observeOrderLines(),
-        preferencesManager.preferenceFlow,
+        darkThemeFlow,
     ) { products, query, favoriteIds, orderLines, pref ->
         val filtered = if (query.isBlank()) {
             products
@@ -473,7 +473,7 @@ class StoreViewModel @JvmOverloads constructor(
             profiles = profiles,
             searchQuery = query,
             orderLines = orderLines,
-            userPreference = pref,
+            isDarkTheme = pref,
         )
     }.stateIn(
         scope = viewModelScope,

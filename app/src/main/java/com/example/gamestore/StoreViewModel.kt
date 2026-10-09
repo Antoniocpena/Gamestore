@@ -9,10 +9,9 @@ import com.example.gamestore.data.OrderApi
 import com.example.gamestore.data.OrderHttpException
 import com.example.gamestore.data.OrderLineEntity
 import com.example.gamestore.data.StoreDatabase
+import com.example.gamestore.data.TestCatalog
 import com.example.gamestore.model.BillingType
 import com.example.gamestore.model.CreateOrderDto
-import com.example.gamestore.model.DeveloperProfile
-import com.example.gamestore.model.GameProduct
 import com.example.gamestore.model.OrderCustomerDto
 import com.example.gamestore.model.OrderLineDto
 import com.example.gamestore.model.OrderReceipt
@@ -21,6 +20,7 @@ import com.example.gamestore.preferences.PreferencesManager
 import com.example.gamestore.ui.state.CheckoutField
 import com.example.gamestore.ui.state.CheckoutUiState
 import com.example.gamestore.ui.state.StoreUiState
+import com.example.gamestore.ui.state.buildStoreUiState
 import com.example.gamestore.validation.CheckoutValidators
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerializationException
 
 class StoreViewModel @JvmOverloads constructor(
@@ -46,32 +48,70 @@ class StoreViewModel @JvmOverloads constructor(
 
     private val favoriteDao = db.favoriteDao()
     private val orderLineDao = db.orderLineDao()
-
     private val preferencesManager = PreferencesManager(application)
-    val darkThemeFlow = preferencesManager.darkThemeFlow
 
-    private val _checkoutState = MutableStateFlow(CheckoutUiState())
-    val checkoutState: StateFlow<CheckoutUiState> = _checkoutState
+    private val orderMutex = Mutex()
+    private val favoriteMutex = Mutex()
 
-    init {
-        viewModelScope.launch {
-            orderLineDao.observeOrderLines().collect { orderLines ->
-                _checkoutState.update { state ->
-                    state.copy(
-                        lines = orderLines.map { entity ->
-                            OrderLineDto(
-                                productId = entity.productId,
-                                productName = entity.productName,
-                                quantity = entity.quantity,
-                                unitPrice = entity.unitPrice,
-                                subtotal = entity.subtotal,
-                            )
-                        },
-                    )
-                }
-            }
-        }
-    }
+    // El pedido se sigue observando aunque el catálogo no esté visible.
+    private val orderLines = orderLineDao.observeOrderLines().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptyList(),
+    )
+
+    private val _checkoutForm = MutableStateFlow(CheckoutUiState())
+
+    val checkoutState: StateFlow<CheckoutUiState> = combine(
+        _checkoutForm,
+        orderLines,
+    ) { form, lines ->
+        form.copy(
+            lines = lines.map { entity ->
+                OrderLineDto(
+                    productId = entity.productId,
+                    productName = entity.productName,
+                    quantity = entity.quantity,
+                    unitPrice = entity.unitPrice,
+                    subtotal = entity.subtotal,
+                )
+            },
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = CheckoutUiState(),
+    )
+
+    // Catálogo generado únicamente en memoria.
+    private val profiles = TestCatalog.profiles
+    private val _allProducts = MutableStateFlow(TestCatalog.createProducts())
+    private val _searchQuery = MutableStateFlow("")
+
+    val uiState: StateFlow<StoreUiState> = combine(
+        _allProducts,
+        _searchQuery,
+        favoriteDao.observeFavoriteIds(),
+        orderLines,
+        preferencesManager.darkThemeFlow,
+    ) { products, query, favoriteIds, lines, darkTheme ->
+        buildStoreUiState(
+            products = products,
+            profiles = profiles,
+            query = query,
+            favoriteIds = favoriteIds,
+            orderLines = lines,
+            darkTheme = darkTheme,
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = StoreUiState(
+            products = _allProducts.value,
+            catalog = _allProducts.value,
+            profiles = profiles,
+        ),
+    )
 
     fun setDarkTheme(enabled: Boolean) {
         viewModelScope.launch {
@@ -79,62 +119,88 @@ class StoreViewModel @JvmOverloads constructor(
         }
     }
 
-    fun startCheckout(productId: String) {
-        if (_checkoutState.value.isSubmitting) return
-
-        val product = _allProducts.value.find {
-            (it.id == productId) && it.isAvailable
-        } ?: return
+    fun toggleFavorite(productId: String) {
+        if (_allProducts.value.none { it.id == productId }) return
 
         viewModelScope.launch {
-            val existing = _checkoutState.value.lines.find { it.productId == productId }
-            val newQty = (existing?.quantity ?: 0) + 1
-            val subtotal = product.price * newQty
-            orderLineDao.insertLine(
-                OrderLineEntity(
-                    productId = product.id,
-                    productName = product.name,
-                    quantity = newQty,
-                    unitPrice = product.price,
-                    subtotal = subtotal,
-                ),
-            )
+            favoriteMutex.withLock {
+                val favorite = FavoriteEntity(productId)
+
+                if (favoriteDao.isFavorite(productId)) {
+                    favoriteDao.deleteFavorite(favorite)
+                } else {
+                    favoriteDao.insertFavorite(favorite)
+                }
+            }
         }
     }
 
-    fun changeQuantity(productId: String, quantity: Int) {
-        if (_checkoutState.value.isSubmitting) return
+    fun onQueryChange(newQuery: String) {
+        _searchQuery.value = newQuery
+    }
+
+    fun clearQuery() {
+        _searchQuery.value = ""
+    }
+
+    fun startCheckout(productId: String) {
+        if (_checkoutForm.value.isSubmitting) return
+
+        val product = _allProducts.value.find {
+            it.id == productId && it.isAvailable
+        } ?: return
 
         viewModelScope.launch {
-            if (quantity <= 0) {
-                orderLineDao.deleteLine(
-                    OrderLineEntity(
-                        productId = productId,
-                        productName = "",
-                        quantity = 0,
-                        unitPrice = 0.0,
-                        subtotal = 0.0,
-                    ),
-                )
-            } else {
-                val product = _allProducts.value.find { it.id == productId } ?: return@launch
-                val subtotal = product.price * quantity
+            orderMutex.withLock {
+                if (_checkoutForm.value.isSubmitting) return@withLock
+
+                _checkoutForm.update {
+                    it.copy(receipt = null, submitError = null)
+                }
+
+                val newQty =
+                    (orderLineDao.getLine(productId)?.quantity ?: 0) + 1
+
                 orderLineDao.insertLine(
                     OrderLineEntity(
-                        productId = productId,
+                        productId = product.id,
                         productName = product.name,
-                        quantity = quantity,
+                        quantity = newQty,
                         unitPrice = product.price,
-                        subtotal = subtotal,
+                        subtotal = product.price * newQty,
                     ),
                 )
             }
         }
     }
 
-    fun confirmOrder() {
+    fun changeQuantity(productId: String, quantity: Int) {
+        if (_checkoutForm.value.isSubmitting) return
+
         viewModelScope.launch {
-            orderLineDao.clearAll()
+            orderMutex.withLock {
+                if (_checkoutForm.value.isSubmitting) return@withLock
+
+                if (quantity <= 0) {
+                    orderLineDao.getLine(productId)?.let {
+                        orderLineDao.deleteLine(it)
+                    }
+                } else {
+                    val product = _allProducts.value.find {
+                        it.id == productId
+                    } ?: return@withLock
+
+                    orderLineDao.insertLine(
+                        OrderLineEntity(
+                            productId = product.id,
+                            productName = product.name,
+                            quantity = quantity,
+                            unitPrice = product.price,
+                            subtotal = product.price * quantity,
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -142,7 +208,7 @@ class StoreViewModel @JvmOverloads constructor(
         field: CheckoutField,
         value: String,
     ) {
-        _checkoutState.update { currentState ->
+        _checkoutForm.update { currentState ->
             val updated = when (field) {
                 CheckoutField.NAME ->
                     currentState.copy(name = value)
@@ -162,7 +228,7 @@ class StoreViewModel @JvmOverloads constructor(
     }
 
     fun onCheckoutFieldTouched(field: CheckoutField) {
-        _checkoutState.update { currentState ->
+        _checkoutForm.update { currentState ->
             val updated = when (field) {
                 CheckoutField.NAME ->
                     currentState.copy(isNameTouched = true)
@@ -182,7 +248,7 @@ class StoreViewModel @JvmOverloads constructor(
     }
 
     fun onBillingTypeChange(type: BillingType) {
-        _checkoutState.update { currentState ->
+        _checkoutForm.update { currentState ->
             val updated = if (type == BillingType.CF) {
                 currentState.copy(
                     billingType = type,
@@ -202,7 +268,7 @@ class StoreViewModel @JvmOverloads constructor(
     }
 
     fun onPaymentMethodChange(method: PaymentMethod) {
-        _checkoutState.update {
+        _checkoutForm.update {
             it.copy(paymentMethod = method)
         }
     }
@@ -223,7 +289,8 @@ class StoreViewModel @JvmOverloads constructor(
         }
 
         val nitError =
-            if ((state.billingType == BillingType.NIT) &&
+            if (
+                state.billingType == BillingType.NIT &&
                 state.isNitTouched
             ) {
                 CheckoutValidators.nit(state.nit)
@@ -232,7 +299,8 @@ class StoreViewModel @JvmOverloads constructor(
             }
 
         val businessNameError =
-            if ((state.billingType == BillingType.NIT) &&
+            if (
+                state.billingType == BillingType.NIT &&
                 state.isBusinessNameTouched
             ) {
                 CheckoutValidators.businessName(state.businessName)
@@ -249,18 +317,17 @@ class StoreViewModel @JvmOverloads constructor(
     }
 
     fun submitOrder() {
-        val currentState = _checkoutState.value
+        val currentState = checkoutState.value
 
-        if (currentState.isSubmitting ||
-            currentState.receipt != null
+        if (
+            _checkoutForm.value.isSubmitting ||
+            _checkoutForm.value.receipt != null
         ) {
             return
         }
 
-        val nameErr =
-            CheckoutValidators.name(currentState.name)
-        val phoneErr =
-            CheckoutValidators.phone(currentState.phone)
+        val nameErr = CheckoutValidators.name(currentState.name)
+        val phoneErr = CheckoutValidators.phone(currentState.phone)
 
         val nitErr =
             if (currentState.billingType == BillingType.NIT) {
@@ -278,13 +345,14 @@ class StoreViewModel @JvmOverloads constructor(
                 null
             }
 
-        if (nameErr != null ||
+        if (
+            nameErr != null ||
             phoneErr != null ||
             nitErr != null ||
             businessErr != null ||
             currentState.lines.isEmpty()
         ) {
-            _checkoutState.update {
+            _checkoutForm.update {
                 it.copy(
                     isNameTouched = true,
                     isPhoneTouched = true,
@@ -317,7 +385,7 @@ class StoreViewModel @JvmOverloads constructor(
             ),
         )
 
-        _checkoutState.update {
+        _checkoutForm.update {
             it.copy(
                 isSubmitting = true,
                 submitError = null,
@@ -328,11 +396,12 @@ class StoreViewModel @JvmOverloads constructor(
             try {
                 val created = orderApi.create(order)
 
-                orderLineDao.clearAll()
+                orderMutex.withLock {
+                    orderLineDao.clearAll()
+                }
 
-                _checkoutState.update { state ->
+                _checkoutForm.update { state ->
                     state.copy(
-                        lines = emptyList(),
                         isSubmitting = false,
                         receipt = OrderReceipt(
                             id = created.id,
@@ -340,20 +409,17 @@ class StoreViewModel @JvmOverloads constructor(
                             total = order.total,
                             customerName = order.customer.name,
                             phone = order.customer.phone,
-                            billingType =
-                                order.customer.billingType,
+                            billingType = order.customer.billingType,
                             nit = order.customer.nit,
-                            businessName =
-                                order.customer.businessName,
-                            paymentMethod =
-                                order.customer.paymentMethod,
+                            businessName = order.customer.businessName,
+                            paymentMethod = order.customer.paymentMethod,
                         ),
                     )
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: OrderHttpException) {
-                _checkoutState.update {
+                _checkoutForm.update {
                     it.copy(
                         isSubmitting = false,
                         submitError =
@@ -361,7 +427,7 @@ class StoreViewModel @JvmOverloads constructor(
                     )
                 }
             } catch (_: SerializationException) {
-                _checkoutState.update {
+                _checkoutForm.update {
                     it.copy(
                         isSubmitting = false,
                         submitError =
@@ -369,7 +435,7 @@ class StoreViewModel @JvmOverloads constructor(
                     )
                 }
             } catch (error: IOException) {
-                _checkoutState.update {
+                _checkoutForm.update {
                     it.copy(
                         isSubmitting = false,
                         submitError =
@@ -377,7 +443,7 @@ class StoreViewModel @JvmOverloads constructor(
                     )
                 }
             } catch (error: Exception) {
-                _checkoutState.update {
+                _checkoutForm.update {
                     it.copy(
                         isSubmitting = false,
                         submitError =
@@ -385,164 +451,6 @@ class StoreViewModel @JvmOverloads constructor(
                     )
                 }
             }
-        }
-    }
-
-    // Catálogo y búsqueda existentes.
-
-    private val profiles = listOf(
-        DeveloperProfile(
-            "dev01", "Nebula Forge", "Estudio independiente",
-            "Guatemala",
-            "Especialistas en aventuras y mundos de fantasía.",
-        ),
-        DeveloperProfile(
-            "dev02", "Pixel Jaguar", "Desarrollador",
-            "México",
-            "Crea juegos de acción inspirados en Latinoamérica.",
-        ),
-        DeveloperProfile(
-            "dev03", "Aurora Byte", "Desarrollador",
-            "Canadá",
-            "Produce experiencias de estrategia y ciencia ficción.",
-        ),
-        DeveloperProfile(
-            "dev04", "Sakura Circuit", "Desarrollador",
-            "Japón",
-            "Enfocado en carreras y juegos competitivos.",
-        ),
-        DeveloperProfile(
-            "dev05", "Andes Interactive", "Desarrollador",
-            "Chile",
-            "Desarrolla experiencias cooperativas y de exploración.",
-        ),
-        DeveloperProfile(
-            "dev06", "Emerald Owl Games", "Desarrollador",
-            "Irlanda",
-            "Diseña rompecabezas y aventuras narrativas.",
-        ),
-        DeveloperProfile(
-            "dev07", "Solaris Works", "Productor",
-            "España",
-            "Publica juegos de deportes y simulación.",
-        ),
-        DeveloperProfile(
-            "dev08", "Crimson Kraken", "Estudio independiente",
-            "Australia",
-            "Crea juegos de supervivencia y acción.",
-        ),
-        DeveloperProfile(
-            "dev09", "Nordic Lantern", "Desarrollador",
-            "Suecia",
-            "Especialistas en estrategia y construcción.",
-        ),
-        DeveloperProfile(
-            "dev10", "Quetzal Labs", "Desarrollador",
-            "Guatemala",
-            "Estudio de juegos educativos y familiares.",
-        ),
-    )
-
-    private val _allProducts =
-        MutableStateFlow(createTestCatalog(profiles))
-
-    private val _searchQuery = MutableStateFlow("")
-
-    val uiState: StateFlow<StoreUiState> = combine(
-        _allProducts,
-        _searchQuery,
-        favoriteDao.observeFavoriteIds(),
-        orderLineDao.observeOrderLines(),
-        darkThemeFlow,
-    ) { products, query, favoriteIds, orderLines, pref ->
-        val filtered = if (query.isBlank()) {
-            products
-        } else {
-            products.filter {
-                it.name.contains(
-                    query,
-                    ignoreCase = true,
-                )
-            }
-        }
-
-        StoreUiState(
-            products = filtered.map { product ->
-                product.copy(isFavorite = favoriteIds.contains(product.id))
-            },
-            profiles = profiles,
-            searchQuery = query,
-            orderLines = orderLines,
-            isDarkTheme = pref,
-        )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = StoreUiState(
-            products = _allProducts.value,
-            profiles = profiles,
-        ),
-    )
-
-    fun toggleFavorite(productId: String) {
-        viewModelScope.launch {
-            val isFav = uiState.value.products.find { it.id == productId }?.isFavorite ?: false
-            if (isFav) {
-                favoriteDao.deleteFavorite(FavoriteEntity(productId))
-            } else {
-                favoriteDao.insertFavorite(FavoriteEntity(productId))
-            }
-        }
-    }
-
-    fun onQueryChange(newQuery: String) {
-        _searchQuery.value = newQuery
-    }
-
-    fun clearQuery() {
-        _searchQuery.value = ""
-    }
-
-    private fun createTestCatalog(
-        availableProfiles: List<DeveloperProfile>,
-    ): List<GameProduct> {
-        val themes = listOf(
-            "Crónicas", "Horizonte", "Leyendas",
-            "Reinos", "Circuito", "Guardianes",
-            "Ecos", "Expedición", "Arena", "Misterios",
-        )
-        val worlds = listOf(
-            "de Aether", "del Jaguar", "Neón",
-            "del Norte", "Solar", "Abisal",
-            "de Jade", "Andina", "Estelar", "Esmeralda",
-        )
-        val genres = listOf(
-            "aventura", "acción", "estrategia",
-            "carreras", "rompecabezas", "simulación",
-            "rol", "deportes", "supervivencia",
-            "plataformas",
-        )
-
-        return List(500) { index ->
-            val number = index + 1
-            val profile =
-                availableProfiles[index % availableProfiles.size]
-            val genre = genres[index % genres.size]
-
-            GameProduct(
-                id = "game-%03d".format(number),
-                name =
-                    "${themes[index % themes.size]} " +
-                            "${worlds[(index / themes.size) % worlds.size]} " +
-                            "#$number",
-                description =
-                    "Videojuego de $genre desarrollado por " +
-                            "${profile.name}.",
-                price = 9.99 + ((index * 7) % 60),
-                developerId = profile.id,
-                imageUrl = "https://picsum.photos/seed/gamestore-$number/600/400",
-                isAvailable = number % 7 != 0,
-            )
         }
     }
 }

@@ -1,53 +1,47 @@
 package com.example.gamestore.ui.state
 
-import com.example.gamestore.domain.calculateSubtotal
-import com.example.gamestore.domain.calculateTotal
-import com.example.gamestore.domain.formatCurrency
+import com.example.gamestore.data.OrderLineEntity
 import com.example.gamestore.model.DeveloperProfile
 import com.example.gamestore.model.GameProduct
-import com.example.gamestore.model.OrderLine
-
-data class CatalogPosition(
-    val lazyFirstVisibleItemIndex: Int = 0,
-    val lazyFirstVisibleItemScrollOffset: Int = 0,
-    val conventionalScrollOffset: Int = 0,
-)
-
-data class OrderFeedback(
-    val message: String,
-    val isError: Boolean,
-)
 
 data class StoreUiState(
+    val products: List<GameProduct> = emptyList(),
     val catalog: List<GameProduct> = emptyList(),
     val profiles: List<DeveloperProfile> = emptyList(),
     val searchQuery: String = "",
-    val order: List<OrderLine> = emptyList(),
-    val catalogPosition: CatalogPosition = CatalogPosition(),
-    val orderFeedback: OrderFeedback? = null,
-) {
-    val visibleProducts: List<GameProduct>
-        get() = if (searchQuery.isBlank()) {
+    val orderLines: List<OrderLineEntity> = emptyList(),
+    val isDarkTheme: Boolean? = null,
+)
+
+fun buildStoreUiState(
+    products: List<GameProduct>,
+    profiles: List<DeveloperProfile>,
+    query: String,
+    favoriteIds: List<String>,
+    orderLines: List<OrderLineEntity>,
+    darkTheme: Boolean,
+): StoreUiState {
+    val favorites = favoriteIds.toSet()
+
+    val catalog = products.map { product ->
+        product.copy(isFavorite = product.id in favorites)
+    }
+
+    val filtered =
+        if (query.isBlank()) {
             catalog
         } else {
             catalog.filter { product ->
-                product.name.contains(searchQuery, ignoreCase = true) ||
-                    product.description.contains(searchQuery, ignoreCase = true)
+                product.name.contains(query, ignoreCase = true)
             }
         }
 
-    val orderItemCount: Int
-        get() = order.sumOf { it.quantity }
-
-    val orderTotalCents: Long
-        get() = calculateTotal(order)
-
-    val formattedOrderTotal: String
-        get() = formatCurrency(orderTotalCents)
-
-    fun orderLine(productId: String): OrderLine? =
-        order.find { it.productId == productId }
-
-    fun formattedSubtotal(productId: String): String =
-        orderLine(productId)?.let { formatCurrency(calculateSubtotal(it)) } ?: formatCurrency(0)
+    return StoreUiState(
+        products = filtered,
+        catalog = catalog,
+        profiles = profiles,
+        searchQuery = query,
+        orderLines = orderLines,
+        isDarkTheme = darkTheme,
+    )
 }

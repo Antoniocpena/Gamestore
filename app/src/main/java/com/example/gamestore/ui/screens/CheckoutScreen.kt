@@ -22,6 +22,7 @@ fun CheckoutScreen(
     onFieldTouched: (CheckoutField) -> Unit,
     onBillingTypeChange: (BillingType) -> Unit,
     onPaymentMethodChange: (PaymentMethod) -> Unit,
+    onQuantityChange: (String, Int) -> Unit,
     onSubmit: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -33,7 +34,10 @@ fun CheckoutScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TextButton(onClick = onBack) {
+        TextButton(
+            onClick = onBack,
+            enabled = !state.isSubmitting
+        ) {
             Text("Regresar")
         }
 
@@ -42,47 +46,74 @@ fun CheckoutScreen(
             style = MaterialTheme.typography.headlineMedium
         )
 
-        val receipt = state.receipt
+        Text(
+            text = "Pedido: ${state.itemCount} producto(s)",
+            style = MaterialTheme.typography.titleMedium
+        )
 
-        if (receipt != null) {
-            Card(
+        state.lines.forEach { line ->
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(line.productName)
                     Text(
-                        "Pedido confirmado",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Text("Comprobante: ${receipt.id}")
-                    Text("Producto: ${receipt.productName}")
-                    Text("Total: $${receipt.total}")
-                    Text("Cliente: ${receipt.customerName}")
-                    Text("Teléfono: ${receipt.phone}")
-                    Text("Facturación: ${receipt.billingType.label}")
-
-                    receipt.nit?.let {
-                        Text("NIT: $it")
-                    }
-
-                    receipt.businessName?.let {
-                        Text("Razón social: $it")
-                    }
-
-                    Text("Pago: ${receipt.paymentMethod.label}")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Comprobante local de demostración. No se realizó ningún cobro.",
-                        style = MaterialTheme.typography.bodySmall
+                        "$${"%.2f".format(line.unitPrice)} × " +
+                                "${line.quantity} = " +
+                                "$${"%.2f".format(line.subtotal)}"
                     )
                 }
+
+                TextButton(
+                    onClick = {
+                        onQuantityChange(
+                            line.productId,
+                            line.quantity - 1
+                        )
+                    },
+                    enabled = !state.isSubmitting
+                ) {
+                    Text("−")
+                }
+
+                TextButton(
+                    onClick = {
+                        onQuantityChange(
+                            line.productId,
+                            line.quantity + 1
+                        )
+                    },
+                    enabled = !state.isSubmitting
+                ) {
+                    Text("+")
+                }
             }
-        } else {
+        }
+
+        Text("Total: $${"%.2f".format(state.total)}")
+
+        if (state.lines.isEmpty()) {
+            Text("Agrega un producto desde el catálogo.")
+        }
+
+        state.submitError?.let { message ->
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        if (state.isSubmitting) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text("Enviando pedido…")
+        }
+
+        CompositionLocalProvider(
+            LocalCheckoutEnabled provides !state.isSubmitting
+        ) {
             CheckoutTextField(
                 label = "Nombre",
                 value = state.name,
@@ -108,7 +139,10 @@ fun CheckoutScreen(
                 keyboardType = KeyboardType.Phone
             )
 
-            Text("Tipo de facturación", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Tipo de facturación",
+                style = MaterialTheme.typography.titleMedium
+            )
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -116,6 +150,7 @@ fun CheckoutScreen(
                 BillingType.entries.forEach { type ->
                     FilterChip(
                         selected = state.billingType == type,
+                        enabled = !state.isSubmitting,
                         onClick = {
                             onBillingTypeChange(type)
                         },
@@ -145,22 +180,32 @@ fun CheckoutScreen(
                     value = state.businessName,
                     error = state.businessNameError,
                     onValueChange = {
-                        onFieldChange(CheckoutField.BUSINESS_NAME, it)
+                        onFieldChange(
+                            CheckoutField.BUSINESS_NAME,
+                            it
+                        )
                     },
                     onTouched = {
-                        onFieldTouched(CheckoutField.BUSINESS_NAME)
+                        onFieldTouched(
+                            CheckoutField.BUSINESS_NAME
+                        )
                     }
                 )
             }
 
-            Text("Método de pago", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Método de pago",
+                style = MaterialTheme.typography.titleMedium
+            )
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 PaymentMethod.entries.forEach { method ->
                     FilterChip(
-                        selected = state.paymentMethod == method,
+                        selected =
+                            state.paymentMethod == method,
+                        enabled = !state.isSubmitting,
                         onClick = {
                             onPaymentMethodChange(method)
                         },
@@ -175,7 +220,10 @@ fun CheckoutScreen(
 
             Button(
                 onClick = onSubmit,
-                enabled = state.isFormValid && state.productId != null,
+                enabled =
+                    state.isFormValid &&
+                            state.lines.isNotEmpty() &&
+                            !state.isSubmitting,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Confirmar pedido")
@@ -183,6 +231,9 @@ fun CheckoutScreen(
         }
     }
 }
+
+private val LocalCheckoutEnabled =
+    staticCompositionLocalOf { true }
 
 @Composable
 private fun CheckoutTextField(
@@ -199,6 +250,7 @@ private fun CheckoutTextField(
 
     OutlinedTextField(
         value = value,
+        enabled = LocalCheckoutEnabled.current,
         onValueChange = onValueChange,
         label = {
             Text(label)

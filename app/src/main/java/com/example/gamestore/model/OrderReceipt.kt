@@ -2,8 +2,7 @@ package com.example.gamestore.model
 
 data class OrderReceipt(
     val id: String,
-    val productId: String,
-    val productName: String,
+    val lines: List<OrderLineDto>,
     val total: Double,
     val customerName: String,
     val phone: String,

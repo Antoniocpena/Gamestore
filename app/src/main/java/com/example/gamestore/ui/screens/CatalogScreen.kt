@@ -52,6 +52,8 @@ private enum class CatalogRenderMode {
 fun CatalogScreen(
     products: List<GameProduct>,
     searchQuery: String,
+    isDarkTheme: Boolean = false,
+    onDarkThemeChange: (Boolean) -> Unit = {},
     onProductSelected: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onQueryChange: (String) -> Unit,
@@ -69,6 +71,19 @@ fun CatalogScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Catálogo (${products.size})") },
+                actions = {
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 8.dp),
+                    ) {
+                        Text("Oscuro", style = MaterialTheme.typography.labelSmall)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Switch(
+                            checked = isDarkTheme,
+                            onCheckedChange = onDarkThemeChange,
+                        )
+                    }
+                },
             )
         },
         floatingActionButton = {

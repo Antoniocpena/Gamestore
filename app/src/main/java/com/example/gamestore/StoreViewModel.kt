@@ -21,6 +21,7 @@ import com.example.gamestore.preferences.PreferencesManager
 import com.example.gamestore.ui.state.CheckoutField
 import com.example.gamestore.ui.state.CheckoutUiState
 import com.example.gamestore.ui.state.StoreUiState
+import com.example.gamestore.ui.state.buildStoreUiState
 import com.example.gamestore.validation.CheckoutValidators
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -48,7 +49,7 @@ class StoreViewModel @JvmOverloads constructor(
     private val orderLineDao = db.orderLineDao()
 
     private val preferencesManager = PreferencesManager(application)
-    val preferenceFlow = preferencesManager.preferenceFlow
+    val darkThemeFlow = preferencesManager.darkThemeFlow
 
     private val _checkoutState = MutableStateFlow(CheckoutUiState())
     val checkoutState: StateFlow<CheckoutUiState> = _checkoutState
@@ -73,9 +74,9 @@ class StoreViewModel @JvmOverloads constructor(
         }
     }
 
-    fun setPreference(value: String) {
+    fun setDarkTheme(enabled: Boolean) {
         viewModelScope.launch {
-            preferencesManager.setPreference(value)
+            preferencesManager.setDarkTheme(enabled)
         }
     }
 
@@ -251,8 +252,8 @@ class StoreViewModel @JvmOverloads constructor(
     fun submitOrder() {
         val currentState = _checkoutState.value
 
-        if (currentState.isSubmitting ||
-            currentState.receipt != null
+        if ((currentState.isSubmitting) ||
+            (currentState.receipt != null)
         ) {
             return
         }
@@ -368,7 +369,7 @@ class StoreViewModel @JvmOverloads constructor(
                             "No pudimos leer la confirmación. Inténtalo más tarde.",
                     )
                 }
-            } catch (error: IOException) {
+            } catch (_: IOException) {
                 _checkoutState.update {
                     it.copy(
                         isSubmitting = false,
@@ -453,27 +454,15 @@ class StoreViewModel @JvmOverloads constructor(
         _searchQuery,
         favoriteDao.observeFavoriteIds(),
         orderLineDao.observeOrderLines(),
-        preferencesManager.preferenceFlow,
-    ) { products, query, favoriteIds, orderLines, pref ->
-        val filtered = if (query.isBlank()) {
-            products
-        } else {
-            products.filter {
-                it.name.contains(
-                    query,
-                    ignoreCase = true,
-                )
-            }
-        }
-
-        StoreUiState(
-            products = filtered.map { product ->
-                product.copy(isFavorite = favoriteIds.contains(product.id))
-            },
+        preferencesManager.darkThemeFlow,
+    ) { products, query, favoriteIds, orderLines, darkTheme ->
+        buildStoreUiState(
+            products = products,
             profiles = profiles,
-            searchQuery = query,
+            query = query,
+            favoriteIds = favoriteIds,
             orderLines = orderLines,
-            userPreference = pref,
+            darkTheme = darkTheme,
         )
     }.stateIn(
         scope = viewModelScope,

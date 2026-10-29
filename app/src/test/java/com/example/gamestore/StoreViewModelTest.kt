@@ -1,43 +1,61 @@
 package com.example.gamestore
 
+import com.example.gamestore.data.OrderLineEntity
 import com.example.gamestore.data.TestCatalog
-import com.example.gamestore.domain.OrderOperationResult
+import com.example.gamestore.ui.state.buildStoreUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StoreViewModelTest {
+
     @Test
-    fun uiState_keepsCatalogQueryOrderAndPositionInOneStateFlow() {
-        val viewModel = StoreViewModel()
+    fun projection_combinesCatalogRoomDataAndPreference() {
+        val catalog = TestCatalog.createProducts()
+        val favorite = catalog.last()
 
-        viewModel.onQueryChange("Crónicas")
-        val product = viewModel.uiState.value.catalog.first { it.stock > 1 }
-        viewModel.toggleFavorite(product.id)
-        viewModel.addToOrder(product.id)
-        viewModel.updateLazyCatalogPosition(firstVisibleItemIndex = 24, scrollOffset = 16)
-        viewModel.updateConventionalCatalogPosition(scrollOffset = 320)
+        val line = OrderLineEntity(
+            productId = favorite.id,
+            productName = favorite.name,
+            quantity = 2,
+            unitPrice = favorite.price,
+            subtotal = favorite.price * 2,
+        )
 
-        val stateAfterConfigurationChange = viewModel.uiState.value
-        assertEquals(TestCatalog.CATALOG_SIZE, stateAfterConfigurationChange.catalog.size)
-        assertEquals("Crónicas", stateAfterConfigurationChange.searchQuery)
-        assertEquals(50, stateAfterConfigurationChange.visibleProducts.size)
-        assertEquals(true, stateAfterConfigurationChange.catalog.first { it.id == product.id }.isFavorite)
-        assertEquals(1, stateAfterConfigurationChange.order.single().quantity)
-        assertEquals(24, stateAfterConfigurationChange.catalogPosition.lazyFirstVisibleItemIndex)
-        assertEquals(16, stateAfterConfigurationChange.catalogPosition.lazyFirstVisibleItemScrollOffset)
-        assertEquals(320, stateAfterConfigurationChange.catalogPosition.conventionalScrollOffset)
+        val state = buildStoreUiState(
+            products = catalog,
+            profiles = TestCatalog.profiles,
+            query = "Crónicas",
+            favoriteIds = listOf(favorite.id),
+            orderLines = listOf(line),
+            darkTheme = true,
+        )
+
+        assertEquals(TestCatalog.CATALOG_SIZE, state.catalog.size)
+        assertEquals(50, state.products.size)
+        assertTrue(state.catalog.last().isFavorite)
+        assertEquals(listOf(line), state.orderLines)
+        assertEquals(true, state.isDarkTheme)
+        assertEquals("Crónicas", state.searchQuery)
     }
 
     @Test
-    fun rejectedOperation_doesNotMutateOrderAndPublishesFeedback() {
-        val viewModel = StoreViewModel()
-        val soldOutProduct = viewModel.uiState.value.catalog.first { !it.isAvailable }
+    fun projection_keepsFavoritesAvailableOutsideSearchResults() {
+        val catalog = TestCatalog.createProducts()
+        val favorite = catalog.first()
 
-        val result = viewModel.addToOrder(soldOutProduct.id)
+        val state = buildStoreUiState(
+            products = catalog,
+            profiles = TestCatalog.profiles,
+            query = "sin coincidencias",
+            favoriteIds = listOf(favorite.id),
+            orderLines = emptyList(),
+            darkTheme = false,
+        )
 
-        assertTrue(result is OrderOperationResult.Rejected)
-        assertTrue(viewModel.uiState.value.order.isEmpty())
-        assertEquals(true, viewModel.uiState.value.orderFeedback?.isError)
+        assertTrue(state.products.isEmpty())
+        assertTrue(state.catalog.first().isFavorite)
+        assertFalse(state.isDarkTheme!!)
     }
 }

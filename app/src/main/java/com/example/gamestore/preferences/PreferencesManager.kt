@@ -1,30 +1,29 @@
 package com.example.gamestore.preferences
-
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
 
-class PreferencesManager(private val context: Context) {
+class PreferencesManager(context: Context) {
+    private val appContext = context.applicationContext
 
-    companion object {
-        val PREF_ORDER = stringPreferencesKey("pref_order")
-        val PREF_THEME = stringPreferencesKey("pref_theme")
+    private companion object {
+        val PREF_DARK_THEME = booleanPreferencesKey("pref_dark_theme")
     }
 
-    val preferenceFlow: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[PREF_THEME] ?: "default"
+    val darkThemeFlow: Flow<Boolean> = appContext.dataStore.data.map { preferences ->
+        preferences[PREF_DARK_THEME] ?: false
     }
 
-    suspend fun setPreference(value: String) {
-        context.dataStore.edit { preferences ->
-            preferences[PREF_THEME] = value
+    suspend fun setDarkTheme(enabled: Boolean) {
+        appContext.dataStore.edit { preferences ->
+            preferences[PREF_DARK_THEME] = enabled
         }
     }
 }

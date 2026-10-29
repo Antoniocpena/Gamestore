@@ -74,6 +74,11 @@ class MainActivity : ComponentActivity() {
                                             uiState.products,
                                         searchQuery =
                                             uiState.searchQuery,
+                                        isDarkTheme =
+                                            uiState.isDarkTheme ?: false,
+                                        onDarkThemeChange =
+                                            storeViewModel::
+                                            setDarkTheme,
                                         onProductSelected = {
                                                 productId ->
                                             backStack.add(

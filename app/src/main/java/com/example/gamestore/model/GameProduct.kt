@@ -1,5 +1,7 @@
 package com.example.gamestore.model
 
+import kotlin.math.roundToLong
+
 data class GameProduct(
     val id: String,
     val name: String,
@@ -9,7 +11,7 @@ data class GameProduct(
     val imageUrl: String = "",
     val isAvailable: Boolean = true,
     val isFavorite: Boolean = false,
-    val priceCents: Long = (price * 100).toLong(),
+    val priceCents: Long = (price * 100).roundToLong(),
     val stock: Int = if (isAvailable) 10 else 0,
     val coverColorIndex: Int = 0,
 )

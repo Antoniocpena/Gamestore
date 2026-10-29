@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -53,8 +52,8 @@ private enum class CatalogRenderMode {
 fun CatalogScreen(
     products: List<GameProduct>,
     searchQuery: String,
-    isDarkTheme: Boolean,
-    onDarkThemeChange: (Boolean) -> Unit,
+    isDarkTheme: Boolean = false,
+    onDarkThemeChange: (Boolean) -> Unit = {},
     onProductSelected: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onQueryChange: (String) -> Unit,
@@ -72,6 +71,19 @@ fun CatalogScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Catálogo (${products.size})") },
+                actions = {
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 8.dp),
+                    ) {
+                        Text("Oscuro", style = MaterialTheme.typography.labelSmall)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Switch(
+                            checked = isDarkTheme,
+                            onCheckedChange = onDarkThemeChange,
+                        )
+                    }
+                },
             )
         },
         floatingActionButton = {
@@ -102,23 +114,7 @@ fun CatalogScreen(
                 },
                 singleLine = true
             )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Tema oscuro",
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = isDarkTheme,
-                    onCheckedChange = onDarkThemeChange,
-                )
-            }
-
+            
             Text(
                 text = "${products.size} resultados",
                 modifier = Modifier.padding(horizontal = 16.dp),

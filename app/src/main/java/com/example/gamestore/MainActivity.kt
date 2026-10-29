@@ -132,15 +132,16 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 )
                                             },
-                                        ) { productId ->
-                                            storeViewModel
-                                                .startCheckout(
-                                                    productId,
+                                            onAddToOrder = { productId ->
+                                                storeViewModel
+                                                    .startCheckout(
+                                                        productId,
+                                                    )
+                                                backStack.add(
+                                                    StoreNavKey.Checkout,
                                                 )
-                                            backStack.add(
-                                                StoreNavKey.Checkout,
-                                            )
-                                        }
+                                            },
+                                        )
                                     }
                                 }
 

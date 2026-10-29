@@ -27,14 +27,19 @@ object TestCatalog {
             val number = index + 1
             val profile = profiles[index % profiles.size]
             val genre = genres[index % genres.size]
+            val priceCents = 999L + ((index * 7) % 60) * 100L
+            val stock = if (number % 7 == 0) 0 else 1 + ((index * 3) % 25)
 
             GameProduct(
                 id = String.format(Locale.US, "game-%03d", number),
                 name = "${themes[index % themes.size]} ${worlds[(index / themes.size) % worlds.size]} #$number",
                 description = "Videojuego de $genre desarrollado por ${profile.name}.",
-                priceCents = 999L + ((index * 7) % 60) * 100L,
+                price = priceCents / 100.0,
                 developerId = profile.id,
-                stock = if (number % 7 == 0) 0 else 1 + ((index * 3) % 25),
+                imageUrl = "https://picsum.photos/seed/gamestore-$number/600/400",
+                isAvailable = stock > 0,
+                priceCents = priceCents,
+                stock = stock,
                 coverColorIndex = index % profiles.size,
             )
         }

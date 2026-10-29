@@ -3,7 +3,9 @@ package com.example.gamestore.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -33,17 +35,17 @@ import com.example.gamestore.ui.state.OrderFeedback
 @Composable
 fun DetailScreen(
     product: GameProduct,
-    quantityInOrder: Int,
-    formattedOrderSubtotal: String,
-    formattedOrderTotal: String,
-    orderFeedback: OrderFeedback?,
+    quantityInOrder: Int = 0,
+    formattedOrderSubtotal: String = "",
+    formattedOrderTotal: String = "",
+    orderFeedback: OrderFeedback? = null,
     onBack: () -> Unit,
     onToggleFavorite: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
     onAddToOrder: (String) -> Unit,
-    onRemoveFromOrder: (String) -> Unit,
-    onUpdateQuantity: (String, Int) -> Unit,
-    onDismissOrderFeedback: () -> Unit,
+    onRemoveFromOrder: (String) -> Unit = {},
+    onUpdateQuantity: (String, Int) -> Unit = { _, _ -> },
+    onDismissOrderFeedback: () -> Unit = {},
 ) {
     var showMore by rememberSaveable { mutableStateOf(value = false) }
 

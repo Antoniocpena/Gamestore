@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    id("com.google.devtools.ksp")
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -62,8 +62,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 
-    implementation("androidx.room3:room3-runtime:3.0.3")
-    ksp("androidx.room3:room3-compiler:3.0.3")
-    implementation("androidx.sqlite:sqlite-framework:2.7.1") // AndroidSQLiteDriver
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
+    implementation(libs.room3.runtime)
+    ksp(libs.room3.compiler)
+    implementation(libs.sqlite.framework)
+    implementation(libs.datastore.preferences)
 }

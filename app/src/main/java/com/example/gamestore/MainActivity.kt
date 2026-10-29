@@ -100,7 +100,11 @@ class MainActivity : ComponentActivity() {
                                                 .clearQuery()
                                         }
                                     ) {
-                                        /* scroll arriba */
+                                        while (backStack.size > 1) {
+                                            backStack.removeLastOrNull()
+                                        }
+                                    } else {
+                                        backStack.removeLastOrNull()
                                     }
                                 }
 
@@ -131,6 +135,13 @@ class MainActivity : ComponentActivity() {
                                                     StoreNavKey.Profile(
                                                         developerId
                                                     )
+                                                },
+                                            ) { productId ->
+                                                storeViewModel.startCheckout(
+                                                    productId,
+                                                )
+                                                backStack.add(
+                                                    StoreNavKey.Checkout,
                                                 )
                                             }
                                         ) { productId ->
@@ -143,7 +154,6 @@ class MainActivity : ComponentActivity() {
                                             )
                                         }
                                     }
-                                }
 
                                 is StoreNavKey.Profile -> {
                                     val profile:
@@ -152,16 +162,39 @@ class MainActivity : ComponentActivity() {
                                             it.id ==
                                                     key.developerId
                                         }
+                                    }
 
-                                    profile?.let {
-                                        ProfileScreen(
-                                            profile = it
+                                    is StoreNavKey.Checkout -> {
+                                        LaunchedEffect(
+                                            checkoutState.receipt?.id,
                                         ) {
                                             backStack
                                                 .removeLastOrNull()
                                         }
+
+                                        CheckoutScreen(
+                                            state = checkoutState,
+                                            onFieldChange =
+                                                storeViewModel::onCheckoutFieldChange,
+                                            onFieldTouched =
+                                                storeViewModel::onCheckoutFieldTouched,
+                                            onBillingTypeChange =
+                                                storeViewModel::onBillingTypeChange,
+                                            onPaymentMethodChange =
+                                                storeViewModel::onPaymentMethodChange,
+                                            onQuantityChange =
+                                                storeViewModel::changeQuantity,
+                                            onSubmit =
+                                                storeViewModel::submitOrder,
+                                            onBack = {
+                                                if (
+                                                    !checkoutState.isSubmitting
+                                                ) {
+                                                    backStack.removeLastOrNull()
+                                                }
+                                            },
+                                        )
                                     }
-                                }
 
                                 is StoreNavKey.Checkout -> {
                                     LaunchedEffect(
@@ -208,8 +241,7 @@ class MainActivity : ComponentActivity() {
                                                     .removeLastOrNull()
                                             }
                                         }
-                                    )
-                                }
+                                    }
 
                                 is StoreNavKey.Confirmation -> {
                                     checkoutState.receipt?.let {
@@ -230,7 +262,6 @@ class MainActivity : ComponentActivity() {
                                 else -> {}
                             }
                         }
-                    }
 
                     BackHandler(
                         enabled = backStack.size > 1

@@ -9,7 +9,7 @@ enum class CheckoutField {
     NAME,
     PHONE,
     NIT,
-    BUSINESS_NAME
+    BUSINESS_NAME,
 }
 
 data class CheckoutUiState(

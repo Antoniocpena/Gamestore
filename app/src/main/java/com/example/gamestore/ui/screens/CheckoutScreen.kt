@@ -24,7 +24,7 @@ fun CheckoutScreen(
     onPaymentMethodChange: (PaymentMethod) -> Unit,
     onQuantityChange: (String, Int) -> Unit,
     onSubmit: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -245,7 +245,7 @@ private fun CheckoutTextField(
     keyboardType: KeyboardType = KeyboardType.Text
 ) {
     var hadFocus by remember {
-        mutableStateOf(false)
+        mutableStateOf(value = false)
     }
 
     OutlinedTextField(

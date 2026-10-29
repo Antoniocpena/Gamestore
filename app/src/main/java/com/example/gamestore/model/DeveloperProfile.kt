@@ -5,5 +5,5 @@ data class DeveloperProfile(
     val name: String,
     val role: String,
     val location: String,
-    val description: String
+    val description: String,
 )

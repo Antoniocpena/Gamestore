@@ -1,6 +1,7 @@
 package com.example.gamestore
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gamestore.data.OrderApi
 import com.example.gamestore.data.OrderHttpException
@@ -12,15 +13,19 @@ import com.example.gamestore.model.OrderCustomerDto
 import com.example.gamestore.model.OrderLineDto
 import com.example.gamestore.model.OrderReceipt
 import com.example.gamestore.model.PaymentMethod
+import com.example.gamestore.preferences.PreferencesManager
 import com.example.gamestore.ui.state.CheckoutField
 import com.example.gamestore.ui.state.CheckoutUiState
 import com.example.gamestore.ui.state.StoreUiState
+import com.example.gamestore.ui.state.buildStoreUiState
 import com.example.gamestore.validation.CheckoutValidators
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
@@ -29,8 +34,9 @@ class StoreViewModel(
     private val orderApi: OrderApi = OrderApi()
 ) : ViewModel() {
 
-    private val _checkoutState = MutableStateFlow(CheckoutUiState())
-    val checkoutState: StateFlow<CheckoutUiState> = _checkoutState
+    fun clearQuery() {
+        _searchQuery.value = ""
+    }
 
     fun startCheckout(productId: String) {
         if (_checkoutState.value.isSubmitting) return
@@ -118,7 +124,7 @@ class StoreViewModel(
     }
 
     fun onCheckoutFieldTouched(field: CheckoutField) {
-        _checkoutState.update { currentState ->
+        _checkoutForm.update { currentState ->
             val updated = when (field) {
                 CheckoutField.NAME ->
                     currentState.copy(isNameTouched = true)
@@ -138,7 +144,7 @@ class StoreViewModel(
     }
 
     fun onBillingTypeChange(type: BillingType) {
-        _checkoutState.update { currentState ->
+        _checkoutForm.update { currentState ->
             val updated = if (type == BillingType.CF) {
                 currentState.copy(
                     billingType = type,
@@ -147,7 +153,7 @@ class StoreViewModel(
                     nitError = null,
                     businessNameError = null,
                     isNitTouched = false,
-                    isBusinessNameTouched = false
+                    isBusinessNameTouched = false,
                 )
             } else {
                 currentState.copy(billingType = type)
@@ -200,7 +206,7 @@ class StoreViewModel(
             nameError = nameError,
             phoneError = phoneError,
             nitError = nitError,
-            businessNameError = businessNameError
+            businessNameError = businessNameError,
         )
     }
 
@@ -507,38 +513,71 @@ class StoreViewModel(
         }
     }
 
-    fun updateConventionalCatalogPosition(scrollOffset: Int) {
-        _uiState.update { state ->
-            val updatedPosition = state.catalogPosition.copy(
-                conventionalScrollOffset = scrollOffset.coerceAtLeast(0),
+        _checkoutForm.update {
+            it.copy(
+                isSubmitting = true,
+                submitError = null,
             )
-            if (updatedPosition == state.catalogPosition) state else state.copy(catalogPosition = updatedPosition)
         }
-    }
 
-    fun clearOrderFeedback() {
-        _uiState.update { it.copy(orderFeedback = null) }
-    }
+        viewModelScope.launch {
+            try {
+                val created = orderApi.create(order)
 
-    private fun applyOrderOperation(
-        successMessage: String,
-        operation: (StoreUiState) -> OrderOperationResult,
-    ): OrderOperationResult {
-        while (true) {
-            val currentState = _uiState.value
-            val result = operation(currentState)
-            val updatedState = when (result) {
-                is OrderOperationResult.Accepted -> currentState.copy(
-                    order = result.order,
-                    orderFeedback = OrderFeedback(message = successMessage, isError = false),
-                )
+                orderMutex.withLock {
+                    orderLineDao.clearAll()
+                }
 
-                is OrderOperationResult.Rejected -> currentState.copy(
-                    orderFeedback = OrderFeedback(message = result.reason.message, isError = true),
-                )
-            }
-            if (_uiState.compareAndSet(currentState, updatedState)) {
-                return result
+                _checkoutForm.update { state ->
+                    state.copy(
+                        isSubmitting = false,
+                        receipt = OrderReceipt(
+                            id = created.id,
+                            lines = order.lines,
+                            total = order.total,
+                            customerName = order.customer.name,
+                            phone = order.customer.phone,
+                            billingType = order.customer.billingType,
+                            nit = order.customer.nit,
+                            businessName = order.customer.businessName,
+                            paymentMethod = order.customer.paymentMethod,
+                        ),
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: OrderHttpException) {
+                _checkoutForm.update {
+                    it.copy(
+                        isSubmitting = false,
+                        submitError =
+                            "No se pudo confirmar el pedido. Inténtalo de nuevo.",
+                    )
+                }
+            } catch (_: SerializationException) {
+                _checkoutForm.update {
+                    it.copy(
+                        isSubmitting = false,
+                        submitError =
+                            "No pudimos leer la confirmación. Inténtalo más tarde.",
+                    )
+                }
+            } catch (error: IOException) {
+                _checkoutForm.update {
+                    it.copy(
+                        isSubmitting = false,
+                        submitError =
+                            "Sin conexión. Revisa internet e inténtalo de nuevo.",
+                    )
+                }
+            } catch (error: Exception) {
+                _checkoutForm.update {
+                    it.copy(
+                        isSubmitting = false,
+                        submitError =
+                            "Ocurrió un problema. Inténtalo de nuevo.",
+                    )
+                }
             }
         }
     }

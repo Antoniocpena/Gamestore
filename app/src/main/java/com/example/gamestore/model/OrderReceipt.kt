@@ -9,5 +9,5 @@ data class OrderReceipt(
     val billingType: BillingType,
     val nit: String?,
     val businessName: String?,
-    val paymentMethod: PaymentMethod
+    val paymentMethod: PaymentMethod,
 )

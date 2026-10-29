@@ -15,7 +15,7 @@ object CheckoutValidators {
 
     fun phone(value: String): String? {
         val isValid =
-            value.length == 8 && value.all { it in '0'..'9' }
+            value.length == 8 && value.all { it in ('0'..'9') }
 
         return if (isValid) {
             null
@@ -26,7 +26,7 @@ object CheckoutValidators {
 
     fun nit(value: String): String? {
         val isValid =
-            value.length >= 5 && value.all { it in '0'..'9' }
+            value.length >= 5 && value.all { it in ('0'..'9') }
 
         return if (isValid) {
             null

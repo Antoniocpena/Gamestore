@@ -36,25 +36,32 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             GamestoreTheme {
-                val appContainer = (application as GamestoreApplication).container
+                val appContainer =
+                    (application as GamestoreApplication).container
 
-                val backStack = rememberNavBackStack(StoreNavKey.Catalog)
+                val backStack = rememberNavBackStack(
+                    StoreNavKey.Catalog
+                )
 
                 val storeViewModel: StoreViewModel = viewModel(
                     factory = StoreViewModelFactory(
+                        productRepository = appContainer.productRepository,
                         favoritesRepository = appContainer.favoritesRepository,
                         orderRepository = appContainer.orderRepository,
                         preferencesRepository = appContainer.preferencesRepository,
                     ),
                 )
 
-                val uiState by storeViewModel.uiState.collectAsStateWithLifecycle()
+                val uiState by storeViewModel.uiState
+                    .collectAsStateWithLifecycle()
 
-                val checkoutState by storeViewModel.checkoutState.collectAsStateWithLifecycle()
+                val checkoutState by storeViewModel.checkoutState
+                    .collectAsStateWithLifecycle()
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                 ) { innerPadding ->
+
                     NavDisplay(
                         backStack = backStack,
                         modifier = Modifier.padding(innerPadding),
@@ -64,6 +71,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                     ) { key ->
+
                         NavEntry(key) {
                             when (key) {
                                 is StoreNavKey.Catalog -> {
@@ -71,15 +79,20 @@ class MainActivity : ComponentActivity() {
                                         products = uiState.products,
                                         searchQuery = uiState.searchQuery,
                                         isDarkTheme = uiState.isDarkTheme ?: false,
+                                        isLoading = uiState.isCatalogLoading,
+                                        errorMessage = uiState.catalogError,
+                                        onRetry = storeViewModel::retryCatalog,
                                         onDarkThemeChange = storeViewModel::setDarkTheme,
                                         onProductSelected = { productId ->
                                             backStack.add(
-                                                StoreNavKey.Detail(productId),
+                                                StoreNavKey.Detail(productId)
                                             )
                                         },
                                         onToggleFavorite = storeViewModel::toggleFavorite,
                                         onQueryChange = storeViewModel::onQueryChange,
-                                        onClearQuery = { storeViewModel.clearQuery() },
+                                        onClearQuery = {
+                                            storeViewModel.clearQuery()
+                                        },
                                         onScrollTop = {},
                                     )
                                 }
@@ -99,12 +112,19 @@ class MainActivity : ComponentActivity() {
                                             onToggleFavorite = storeViewModel::toggleFavorite,
                                             onOpenProfile = { developerId ->
                                                 backStack.add(
-                                                    StoreNavKey.Profile(developerId),
+                                                    StoreNavKey.Profile(
+                                                        developerId
+                                                    )
                                                 )
                                             },
                                             onAddToOrder = { productId ->
-                                                storeViewModel.startCheckout(productId)
-                                                backStack.add(StoreNavKey.Checkout)
+                                                storeViewModel.startCheckout(
+                                                    productId
+                                                )
+
+                                                backStack.add(
+                                                    StoreNavKey.Checkout
+                                                )
                                             },
                                         )
                                     }

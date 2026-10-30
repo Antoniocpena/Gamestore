@@ -6,8 +6,10 @@ import com.example.gamestore.data.TestCatalog
 import com.example.gamestore.data.repository.FavoritesRepository
 import com.example.gamestore.data.repository.OrderRepository
 import com.example.gamestore.data.repository.PreferencesRepository
+import com.example.gamestore.data.repository.ProductRepository
 import com.example.gamestore.model.BillingType
 import com.example.gamestore.model.CreateOrderDto
+import com.example.gamestore.model.GameProduct
 import com.example.gamestore.model.OrderCustomerDto
 import com.example.gamestore.model.OrderLineDto
 import com.example.gamestore.model.OrderReceipt
@@ -16,66 +18,116 @@ import com.example.gamestore.ui.state.CheckoutField
 import com.example.gamestore.ui.state.CheckoutUiState
 import com.example.gamestore.ui.state.StoreUiState
 import com.example.gamestore.validation.CheckoutValidators
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class StoreViewModel(
+    private val productRepository: ProductRepository,
     private val favoritesRepository: FavoritesRepository,
     private val orderRepository: OrderRepository,
     private val preferencesRepository: PreferencesRepository,
 ) : ViewModel() {
 
-    private val catalog = TestCatalog.createProducts()
+    // Los perfiles continúan siendo locales.
     private val profiles = TestCatalog.profiles
 
     private val _searchQuery = MutableStateFlow("")
+    private val _catalogRetry = MutableStateFlow(0)
+
+    private data class CatalogState(
+        val products: List<GameProduct> = emptyList(),
+        val loading: Boolean = true,
+        val error: String? = null,
+    )
+
+    private val remoteCatalog = _catalogRetry.flatMapLatest {
+        productRepository.observeProducts()
+            .map { products ->
+                CatalogState(
+                    products = products,
+                    loading = false,
+                )
+            }
+            .onStart {
+                emit(CatalogState())
+            }
+            .catch { error ->
+                emit(
+                    CatalogState(
+                        loading = false,
+                        error = "No se pudo cargar el catálogo. " +
+                                "Revisa la conexión y la configuración de Firebase. " +
+                                (error.localizedMessage ?: "Error desconocido."),
+                    )
+                )
+            }
+    }
 
     val uiState: StateFlow<StoreUiState> = combine(
+        remoteCatalog,
         _searchQuery,
         favoritesRepository.observeFavoriteIds(),
         preferencesRepository.observeDarkTheme(),
-    ) { query, favoriteIds, isDarkTheme ->
+    ) { remote, query, favoriteIds, isDarkTheme ->
+
         val favoritesSet = favoriteIds.toSet()
 
-        val updatedCatalog = catalog.map { product ->
-            product.copy(isFavorite = product.id in favoritesSet)
+        val catalog = remote.products.map { product ->
+            product.copy(
+                isFavorite = product.id in favoritesSet
+            )
         }
 
-        val filtered = if (query.isBlank()) {
-            updatedCatalog
+        val filteredProducts = if (query.isBlank()) {
+            catalog
         } else {
-            updatedCatalog.filter { product ->
-                product.name.contains(query, ignoreCase = true)
+            catalog.filter { product ->
+                product.name.contains(
+                    query,
+                    ignoreCase = true,
+                )
             }
         }
 
         StoreUiState(
-            products = filtered,
-            catalog = updatedCatalog,
+            isCatalogLoading = remote.loading,
+            catalogError = remote.error,
+            products = filteredProducts,
+            catalog = catalog,
             profiles = profiles,
             searchQuery = query,
             isDarkTheme = isDarkTheme,
         )
+
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = StoreUiState(
-            products = catalog,
-            catalog = catalog,
             profiles = profiles,
-            searchQuery = "",
             isDarkTheme = false,
         ),
     )
 
     private val _checkoutState = MutableStateFlow(CheckoutUiState())
-    val checkoutState: StateFlow<CheckoutUiState> = _checkoutState.asStateFlow()
+
+    val checkoutState: StateFlow<CheckoutUiState> =
+        _checkoutState.asStateFlow()
+
+    fun retryCatalog() {
+        _catalogRetry.update { it + 1 }
+    }
 
     fun onQueryChange(query: String) {
         _searchQuery.value = query
@@ -87,8 +139,12 @@ class StoreViewModel(
 
     fun toggleFavorite(productId: String) {
         viewModelScope.launch {
-            val currentProduct = uiState.value.catalog.find { it.id == productId }
+            val currentProduct = uiState.value.catalog.find {
+                it.id == productId
+            }
+
             val isFavorite = currentProduct?.isFavorite ?: false
+
             if (isFavorite) {
                 favoritesRepository.removeFavorite(productId)
             } else {
@@ -104,10 +160,15 @@ class StoreViewModel(
     }
 
     fun startCheckout(productId: String) {
-        val product = uiState.value.catalog.find { it.id == productId } ?: return
+        val product = uiState.value.catalog.find {
+            it.id == productId
+        } ?: return
 
         _checkoutState.update { state ->
-            val existing = state.lines.find { it.productId == productId }
+            val existing = state.lines.find {
+                it.productId == productId
+            }
+
             val updatedLines = if (existing == null) {
                 state.lines + OrderLineDto(
                     productId = product.id,
@@ -128,17 +189,23 @@ class StoreViewModel(
                     }
                 }
             }
+
             state.copy(lines = updatedLines)
         }
     }
 
-    fun changeQuantity(productId: String, quantity: Int) {
+    fun changeQuantity(
+        productId: String,
+        quantity: Int,
+    ) {
         _checkoutState.update { state ->
             state.copy(
                 lines = state.lines.mapNotNull { line ->
                     when {
                         line.productId != productId -> line
+
                         quantity <= 0 -> null
+
                         else -> line.copy(
                             quantity = quantity,
                             subtotal = quantity * line.unitPrice,
@@ -149,13 +216,18 @@ class StoreViewModel(
         }
     }
 
-    fun onCheckoutFieldChange(field: CheckoutField, value: String) {
+    fun onCheckoutFieldChange(
+        field: CheckoutField,
+        value: String,
+    ) {
         _checkoutState.update { state ->
             when (field) {
                 CheckoutField.NAME -> state.copy(name = value)
                 CheckoutField.PHONE -> state.copy(phone = value)
                 CheckoutField.NIT -> state.copy(nit = value)
-                CheckoutField.BUSINESS_NAME -> state.copy(businessName = value)
+                CheckoutField.BUSINESS_NAME -> state.copy(
+                    businessName = value
+                )
             }
         }
     }
@@ -163,37 +235,66 @@ class StoreViewModel(
     fun onCheckoutFieldTouched(field: CheckoutField) {
         _checkoutState.update { state ->
             when (field) {
-                CheckoutField.NAME -> state.copy(isNameTouched = true)
-                CheckoutField.PHONE -> state.copy(isPhoneTouched = true)
-                CheckoutField.NIT -> state.copy(isNitTouched = true)
-                CheckoutField.BUSINESS_NAME -> state.copy(isBusinessNameTouched = true)
+                CheckoutField.NAME -> state.copy(
+                    isNameTouched = true
+                )
+
+                CheckoutField.PHONE -> state.copy(
+                    isPhoneTouched = true
+                )
+
+                CheckoutField.NIT -> state.copy(
+                    isNitTouched = true
+                )
+
+                CheckoutField.BUSINESS_NAME -> state.copy(
+                    isBusinessNameTouched = true
+                )
             }
         }
     }
 
     fun onBillingTypeChange(type: BillingType) {
-        _checkoutState.update { it.copy(billingType = type) }
+        _checkoutState.update {
+            it.copy(billingType = type)
+        }
     }
 
     fun onPaymentMethodChange(method: PaymentMethod) {
-        _checkoutState.update { it.copy(paymentMethod = method) }
+        _checkoutState.update {
+            it.copy(paymentMethod = method)
+        }
     }
 
     fun submitOrder() {
         val currentState = _checkoutState.value
 
-        if ((currentState.isSubmitting) || (currentState.receipt != null)) return
+        if (currentState.isSubmitting || currentState.receipt != null) {
+            return
+        }
 
         val nameErr = CheckoutValidators.name(currentState.name)
         val phoneErr = CheckoutValidators.phone(currentState.phone)
+
         val nitErr = if (currentState.billingType == BillingType.NIT) {
             CheckoutValidators.nit(currentState.nit)
-        } else null
+        } else {
+            null
+        }
+
         val businessErr = if (currentState.billingType == BillingType.NIT) {
             CheckoutValidators.businessName(currentState.businessName)
-        } else null
+        } else {
+            null
+        }
 
-        if (nameErr != null || phoneErr != null || nitErr != null || businessErr != null || currentState.lines.isEmpty()) {
+        if (
+            nameErr != null ||
+            phoneErr != null ||
+            nitErr != null ||
+            businessErr != null ||
+            currentState.lines.isEmpty()
+        ) {
             _checkoutState.update {
                 it.copy(
                     isNameTouched = true,
@@ -206,6 +307,7 @@ class StoreViewModel(
                     businessNameError = businessErr,
                 )
             }
+
             return
         }
 
@@ -216,16 +318,26 @@ class StoreViewModel(
                 name = currentState.name.trim(),
                 phone = currentState.phone.trim(),
                 billingType = currentState.billingType,
-                nit = currentState.nit.trim().takeIf { currentState.billingType == BillingType.NIT },
-                businessName = currentState.businessName.trim().takeIf { currentState.billingType == BillingType.NIT },
+                nit = currentState.nit.trim().takeIf {
+                    currentState.billingType == BillingType.NIT
+                },
+                businessName = currentState.businessName.trim().takeIf {
+                    currentState.billingType == BillingType.NIT
+                },
                 paymentMethod = currentState.paymentMethod,
             ),
         )
 
-        _checkoutState.update { it.copy(isSubmitting = true, submitError = null) }
+        _checkoutState.update {
+            it.copy(
+                isSubmitting = true,
+                submitError = null,
+            )
+        }
 
         viewModelScope.launch {
             val result = orderRepository.createOrder(createOrderDto)
+
             result.onSuccess { createdOrder ->
                 _checkoutState.update { state ->
                     state.copy(
@@ -248,7 +360,8 @@ class StoreViewModel(
                 _checkoutState.update {
                     it.copy(
                         isSubmitting = false,
-                        submitError = error.message ?: "Error al procesar el pedido.",
+                        submitError = error.message
+                            ?: "Error al procesar el pedido.",
                     )
                 }
             }

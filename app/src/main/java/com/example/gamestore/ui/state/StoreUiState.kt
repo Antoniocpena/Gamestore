@@ -5,6 +5,8 @@ import com.example.gamestore.model.DeveloperProfile
 import com.example.gamestore.model.GameProduct
 
 data class StoreUiState(
+    val isCatalogLoading: Boolean = true,
+    val catalogError: String? = null,
     val products: List<GameProduct> = emptyList(),
     val catalog: List<GameProduct> = emptyList(),
     val profiles: List<DeveloperProfile> = emptyList(),
@@ -21,22 +23,28 @@ fun buildStoreUiState(
     orderLines: List<OrderLineEntity>,
     darkTheme: Boolean,
 ): StoreUiState {
+
     val favorites = favoriteIds.toSet()
 
     val catalog = products.map { product ->
-        product.copy(isFavorite = product.id in favorites)
+        product.copy(
+            isFavorite = product.id in favorites
+        )
     }
 
-    val filtered =
-        if (query.isBlank()) {
-            catalog
-        } else {
-            catalog.filter { product ->
-                product.name.contains(query, ignoreCase = true)
-            }
+    val filtered = if (query.isBlank()) {
+        catalog
+    } else {
+        catalog.filter { product ->
+            product.name.contains(
+                query,
+                ignoreCase = true,
+            )
         }
+    }
 
     return StoreUiState(
+        isCatalogLoading = false,
         products = filtered,
         catalog = catalog,
         profiles = profiles,

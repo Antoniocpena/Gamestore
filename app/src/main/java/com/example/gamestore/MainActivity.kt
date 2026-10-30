@@ -8,7 +8,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,256 +27,140 @@ import com.example.gamestore.ui.theme.GamestoreTheme
 
 class MainActivity : ComponentActivity() {
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(
+        savedInstanceState: Bundle?,
+    ) {
         super.onCreate(savedInstanceState)
+
         enableEdgeToEdge()
 
         setContent {
             GamestoreTheme {
-                val backStack =
-                    rememberNavBackStack(StoreNavKey.Catalog)
+                val appContainer = (application as GamestoreApplication).container
 
-                val storeViewModel: StoreViewModel = viewModel()
+                val backStack = rememberNavBackStack(StoreNavKey.Catalog)
 
-                val uiState by storeViewModel.uiState
-                    .collectAsStateWithLifecycle()
+                val storeViewModel: StoreViewModel = viewModel(
+                    factory = StoreViewModelFactory(
+                        favoritesRepository = appContainer.favoritesRepository,
+                        orderRepository = appContainer.orderRepository,
+                        preferencesRepository = appContainer.preferencesRepository,
+                    ),
+                )
 
-                val checkoutState by storeViewModel.checkoutState
-                    .collectAsStateWithLifecycle()
+                val uiState by storeViewModel.uiState.collectAsStateWithLifecycle()
+
+                val checkoutState by storeViewModel.checkoutState.collectAsStateWithLifecycle()
 
                 Scaffold(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
                 ) { innerPadding ->
                     NavDisplay(
                         backStack = backStack,
                         modifier = Modifier.padding(innerPadding),
                         onBack = {
-                            if (!checkoutState.isSubmitting) {
-                                if (
-                                    backStack.lastOrNull() ==
-                                    StoreNavKey.Confirmation
-                                ) {
-                                    while (backStack.size > 1) {
-                                        backStack.removeLastOrNull()
-                                    }
-                                } else {
-                                    backStack.removeLastOrNull()
-                                }
+                            if (backStack.size > 1) {
+                                backStack.removeLastOrNull()
                             }
-                        }
+                        },
                     ) { key ->
                         NavEntry(key) {
                             when (key) {
                                 is StoreNavKey.Catalog -> {
                                     CatalogScreen(
-                                        products = uiState.visibleProducts,
+                                        products = uiState.products,
                                         searchQuery = uiState.searchQuery,
-                                        catalogPosition = uiState.catalogPosition,
-                                        orderItemCount = uiState.orderItemCount,
-                                        formattedOrderTotal = uiState.formattedOrderTotal,
+                                        isDarkTheme = uiState.isDarkTheme ?: false,
+                                        onDarkThemeChange = storeViewModel::setDarkTheme,
                                         onProductSelected = { productId ->
                                             backStack.add(
-                                                StoreNavKey.Detail(
-                                                    productId
-                                                )
+                                                StoreNavKey.Detail(productId),
                                             )
                                         },
-                                        onToggleFavorite = {
-                                                productId ->
-                                            storeViewModel
-                                                .toggleFavorite(
-                                                    productId
-                                                )
-                                        },
-                                        onQueryChange = { query ->
-                                            storeViewModel
-                                                .onQueryChange(
-                                                    query
-                                                )
-                                        },
-                                        onClearQuery = {
-                                            storeViewModel
-                                                .clearQuery()
-                                        }
-                                    ) {
-                                        while (backStack.size > 1) {
-                                            backStack.removeLastOrNull()
-                                        }
-                                    } else {
-                                        backStack.removeLastOrNull()
-                                    }
+                                        onToggleFavorite = storeViewModel::toggleFavorite,
+                                        onQueryChange = storeViewModel::onQueryChange,
+                                        onClearQuery = { storeViewModel.clearQuery() },
+                                        onScrollTop = {},
+                                    )
                                 }
 
                                 is StoreNavKey.Detail -> {
                                     val product: GameProduct? =
-                                        uiState.products.find {
+                                        uiState.catalog.find {
                                             it.id == key.productId
                                         }
 
                                     product?.let {
-                                        val orderLine = uiState.orderLine(it.id)
                                         DetailScreen(
                                             product = it,
                                             onBack = {
-                                                backStack
-                                                    .removeLastOrNull()
+                                                backStack.removeLastOrNull()
                                             },
-                                            onToggleFavorite = {
-                                                    productId ->
-                                                storeViewModel
-                                                    .toggleFavorite(
-                                                        productId
-                                                    )
+                                            onToggleFavorite = storeViewModel::toggleFavorite,
+                                            onOpenProfile = { developerId ->
+                                                backStack.add(
+                                                    StoreNavKey.Profile(developerId),
+                                                )
                                             },
-                                            onOpenProfile = {
-                                                    developerId ->
-                                                backStack.add(
-                                                    StoreNavKey.Profile(
-                                                        developerId
-                                                    )
-                                                },
-                                            ) { productId ->
-                                                storeViewModel.startCheckout(
-                                                    productId,
-                                                )
-                                                backStack.add(
-                                                    StoreNavKey.Checkout,
-                                                )
-                                            }
-                                        ) { productId ->
-                                            storeViewModel
-                                                .startCheckout(
-                                                    productId
-                                                )
-                                            backStack.add(
-                                                StoreNavKey.Checkout
-                                            )
-                                        }
+                                            onAddToOrder = { productId ->
+                                                storeViewModel.startCheckout(productId)
+                                                backStack.add(StoreNavKey.Checkout)
+                                            },
+                                        )
                                     }
+                                }
 
                                 is StoreNavKey.Profile -> {
-                                    val profile:
-                                            DeveloperProfile? =
+                                    val profile: DeveloperProfile? =
                                         uiState.profiles.find {
-                                            it.id ==
-                                                    key.developerId
-                                        }
-                                    }
-
-                                    is StoreNavKey.Checkout -> {
-                                        LaunchedEffect(
-                                            checkoutState.receipt?.id,
-                                        ) {
-                                            backStack
-                                                .removeLastOrNull()
+                                            it.id == key.developerId
                                         }
 
-                                        CheckoutScreen(
-                                            state = checkoutState,
-                                            onFieldChange =
-                                                storeViewModel::onCheckoutFieldChange,
-                                            onFieldTouched =
-                                                storeViewModel::onCheckoutFieldTouched,
-                                            onBillingTypeChange =
-                                                storeViewModel::onBillingTypeChange,
-                                            onPaymentMethodChange =
-                                                storeViewModel::onPaymentMethodChange,
-                                            onQuantityChange =
-                                                storeViewModel::changeQuantity,
-                                            onSubmit =
-                                                storeViewModel::submitOrder,
+                                    profile?.let {
+                                        ProfileScreen(
+                                            profile = it,
                                             onBack = {
-                                                if (
-                                                    !checkoutState.isSubmitting
-                                                ) {
+                                                backStack.removeLastOrNull()
+                                            },
+                                        )
+                                    }
+                                }
+
+                                is StoreNavKey.Checkout -> {
+                                    CheckoutScreen(
+                                        state = checkoutState,
+                                        onFieldChange = storeViewModel::onCheckoutFieldChange,
+                                        onFieldTouched = storeViewModel::onCheckoutFieldTouched,
+                                        onBillingTypeChange = storeViewModel::onBillingTypeChange,
+                                        onPaymentMethodChange = storeViewModel::onPaymentMethodChange,
+                                        onQuantityChange = storeViewModel::changeQuantity,
+                                        onSubmit = storeViewModel::submitOrder,
+                                        onBack = {
+                                            backStack.removeLastOrNull()
+                                        },
+                                    )
+                                }
+
+                                is StoreNavKey.Confirmation -> {
+                                    checkoutState.receipt?.let { receipt ->
+                                        ConfirmationScreen(
+                                            receipt = receipt,
+                                            onDone = {
+                                                while (backStack.size > 1) {
                                                     backStack.removeLastOrNull()
                                                 }
                                             },
                                         )
                                     }
-
-                                is StoreNavKey.Checkout -> {
-                                    LaunchedEffect(
-                                        checkoutState.receipt?.id
-                                    ) {
-                                        if (
-                                            checkoutState.receipt != null &&
-                                            backStack.lastOrNull() ==
-                                            StoreNavKey.Checkout
-                                        ) {
-                                            backStack.add(
-                                                StoreNavKey
-                                                    .Confirmation
-                                            )
-                                        }
-                                    }
-
-                                    CheckoutScreen(
-                                        state = checkoutState,
-                                        onFieldChange =
-                                            storeViewModel::
-                                            onCheckoutFieldChange,
-                                        onFieldTouched =
-                                            storeViewModel::
-                                            onCheckoutFieldTouched,
-                                        onBillingTypeChange =
-                                            storeViewModel::
-                                            onBillingTypeChange,
-                                        onPaymentMethodChange =
-                                            storeViewModel::
-                                            onPaymentMethodChange,
-                                        onQuantityChange =
-                                            storeViewModel::
-                                            changeQuantity,
-                                        onSubmit =
-                                            storeViewModel::
-                                            submitOrder,
-                                        onBack = {
-                                            if (
-                                                !checkoutState
-                                                    .isSubmitting
-                                            ) {
-                                                backStack
-                                                    .removeLastOrNull()
-                                            }
-                                        }
-                                    }
-
-                                is StoreNavKey.Confirmation -> {
-                                    checkoutState.receipt?.let {
-                                            receipt ->
-                                        ConfirmationScreen(
-                                            receipt = receipt
-                                        ) {
-                                            while (
-                                                backStack.size > 1
-                                            ) {
-                                                backStack
-                                                    .removeLastOrNull()
-                                            }
-                                        }
-                                    }
                                 }
-
-                                else -> {}
                             }
                         }
+                    }
 
                     BackHandler(
-                        enabled = backStack.size > 1
+                        enabled = backStack.size > 1,
                     ) {
-                        if (!checkoutState.isSubmitting) {
-                            if (
-                                backStack.lastOrNull() ==
-                                StoreNavKey.Confirmation
-                            ) {
-                                while (backStack.size > 1) {
-                                    backStack.removeLastOrNull()
-                                }
-                            } else {
-                                backStack.removeLastOrNull()
-                            }
-                        }
+                        backStack.removeLastOrNull()
                     }
                 }
             }
